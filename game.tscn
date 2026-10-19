@@ -3,6 +3,81 @@
 [ext_resource type="Script" uid="uid://bqlsvqvfagkd7" path="res://game.gd" id="1_80nbo"]
 [ext_resource type="Texture2D" uid="uid://ba65lh7m3elma" path="res://images/cute cube face.png" id="2_e2o6t"]
 [ext_resource type="Texture2D" uid="uid://cfd8pljc5twdy" path="res://images/purple_swing_orb.png" id="3_swing"]
+[ext_resource type="Texture2D" path="res://images/jelly_skin_catalog.png" id="4_skins"]
+[ext_resource type="Texture2D" path="res://images/common_chest.png" id="5_chest"]
+[ext_resource type="Texture2D" path="res://images/uncommon_chest.png" id="6_uncommon"]
+[ext_resource type="Texture2D" path="res://images/rare_chest.png" id="7_rare"]
+[ext_resource type="Texture2D" path="res://images/epic_chest.png" id="8_epic"]
+[ext_resource type="Texture2D" path="res://images/legendary_chest.png" id="9_legendary"]
+
+[sub_resource type="StyleBoxFlat" id="StylePrimaryNormal"]
+bg_color = Color(0.12, 0.88, 0.72, 1)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 5
+border_color = Color(0.88, 1, 0.96, 0.9)
+corner_radius_top_left = 24
+corner_radius_top_right = 24
+corner_radius_bottom_right = 24
+corner_radius_bottom_left = 24
+shadow_color = Color(0.05, 0.18, 0.42, 0.42)
+shadow_size = 7
+shadow_offset = Vector2(0, 5)
+
+[sub_resource type="StyleBoxFlat" id="StylePrimaryHover"]
+bg_color = Color(0.3, 1, 0.83, 1)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 5
+border_color = Color(1, 1, 1, 1)
+corner_radius_top_left = 24
+corner_radius_top_right = 24
+corner_radius_bottom_right = 24
+corner_radius_bottom_left = 24
+
+[sub_resource type="StyleBoxFlat" id="StyleSecondaryNormal"]
+bg_color = Color(0.55, 0.35, 0.95, 1)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 5
+border_color = Color(0.93, 0.84, 1, 0.95)
+corner_radius_top_left = 20
+corner_radius_top_right = 20
+corner_radius_bottom_right = 20
+corner_radius_bottom_left = 20
+shadow_color = Color(0.08, 0.05, 0.25, 0.35)
+shadow_size = 6
+shadow_offset = Vector2(0, 4)
+
+[sub_resource type="StyleBoxFlat" id="StyleSecondaryHover"]
+bg_color = Color(0.7, 0.5, 1, 1)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 5
+border_color = Color(1, 1, 1, 1)
+corner_radius_top_left = 20
+corner_radius_top_right = 20
+corner_radius_bottom_right = 20
+corner_radius_bottom_left = 20
+
+[sub_resource type="StyleBoxFlat" id="StyleGoldNormal"]
+bg_color = Color(1, 0.68, 0.22, 1)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 5
+border_color = Color(1, 0.95, 0.68, 1)
+corner_radius_top_left = 20
+corner_radius_top_right = 20
+corner_radius_bottom_right = 20
+corner_radius_bottom_left = 20
+shadow_color = Color(0.15, 0.08, 0.25, 0.35)
+shadow_size = 6
+shadow_offset = Vector2(0, 4)
 
 [node name="Game" type="Node2D" unique_id=437727441]
 script = ExtResource("1_80nbo")
@@ -65,13 +140,34 @@ theme_override_constants/shadow_offset_y = 3
 theme_override_font_sizes/font_size = 32
 horizontal_alignment = 1
 
+[node name="LeaderboardPanel" type="ColorRect" parent="HUD"]
+layout_mode = 0
+offset_left = 415.0
+offset_top = 20.0
+offset_right = 700.0
+offset_bottom = 225.0
+color = Color(0.08, 0.12, 0.3, 0.78)
+
+[node name="LeaderboardText" type="Label" parent="HUD/LeaderboardPanel"]
+layout_mode = 0
+offset_left = 16.0
+offset_top = 12.0
+offset_right = 270.0
+offset_bottom = 195.0
+theme_override_colors/font_color = Color(0.95, 0.95, 1, 1)
+theme_override_colors/font_shadow_color = Color(0.03, 0.03, 0.1, 1)
+theme_override_constants/shadow_offset_x = 2
+theme_override_constants/shadow_offset_y = 2
+theme_override_font_sizes/font_size = 21
+text = "LEADERBOARD\n1. YOU     0"
+
 [node name="GameOverScreen" type="ColorRect" parent="HUD" unique_id=634581657]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color(0.08, 0.035, 0.14, 0.86)
+color = Color(0.31, 0.12, 0.55, 0.93)
 
 [node name="GameOver" type="Label" parent="HUD/GameOverScreen" unique_id=1938703430]
 layout_mode = 0
@@ -84,7 +180,7 @@ theme_override_colors/font_shadow_color = Color(0.18, 0.04, 0.12, 1)
 theme_override_constants/shadow_offset_x = 3
 theme_override_constants/shadow_offset_y = 4
 theme_override_font_sizes/font_size = 42
-text = "JELLY GOT BIT!"
+text = "RUN OVER!"
 horizontal_alignment = 1
 
 [node name="GameOverBest" type="Label" parent="HUD/GameOverScreen" unique_id=1640410986]
@@ -119,7 +215,21 @@ theme_override_colors/font_color = Color(0.19, 0.07, 0.3, 1)
 theme_override_colors/font_pressed_color = Color(0.12, 0.04, 0.2, 1)
 theme_override_colors/font_hover_color = Color(0.3, 0.12, 0.44, 1)
 theme_override_font_sizes/font_size = 28
-text = "START OVER"
+theme_override_styles/normal = SubResource("StylePrimaryNormal")
+theme_override_styles/hover = SubResource("StylePrimaryHover")
+text = "PLAY AGAIN"
+
+[node name="MainMenuButton" type="Button" parent="HUD/GameOverScreen"]
+layout_mode = 0
+offset_left = 210.0
+offset_top = 535.0
+offset_right = 510.0
+offset_bottom = 605.0
+theme_override_font_sizes/font_size = 24
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_styles/normal = SubResource("StyleSecondaryNormal")
+theme_override_styles/hover = SubResource("StyleSecondaryHover")
+text = "HOME"
 
 [node name="StartScreen" type="ColorRect" parent="HUD"]
 anchors_preset = 15
@@ -127,15 +237,26 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color(0.055, 0.11, 0.25, 0.96)
+color = Color(0.19, 0.49, 0.92, 1)
+
+[node name="Eyebrow" type="Label" parent="HUD/StartScreen"]
+layout_mode = 0
+offset_left = 100.0
+offset_top = 82.0
+offset_right = 620.0
+offset_bottom = 115.0
+theme_override_colors/font_color = Color(1, 0.88, 0.33, 1)
+theme_override_font_sizes/font_size = 18
+text = "ENDLESS SWING RUNNER"
+horizontal_alignment = 1
 
 [node name="Title" type="Label" parent="HUD/StartScreen"]
 layout_mode = 0
 offset_left = 50.0
-offset_top = 185.0
+offset_top = 120.0
 offset_right = 670.0
-offset_bottom = 290.0
-theme_override_colors/font_color = Color(0.48, 0.95, 1, 1)
+offset_bottom = 220.0
+theme_override_colors/font_color = Color(1, 0.94, 0.47, 1)
 theme_override_colors/font_shadow_color = Color(0.12, 0.03, 0.25, 1)
 theme_override_constants/shadow_offset_x = 4
 theme_override_constants/shadow_offset_y = 6
@@ -146,56 +267,389 @@ horizontal_alignment = 1
 [node name="Tagline" type="Label" parent="HUD/StartScreen"]
 layout_mode = 0
 offset_left = 80.0
-offset_top = 300.0
+offset_top = 230.0
 offset_right = 640.0
-offset_bottom = 345.0
+offset_bottom = 270.0
 theme_override_colors/font_color = Color(0.93, 0.88, 1, 1)
 theme_override_font_sizes/font_size = 24
-text = "Swing fast. Grab coins. Escape the bats."
+text = "Collect coins. Out-swing the bats. Don't touch lava."
 horizontal_alignment = 1
+
+[node name="MenuJelly" type="TextureRect" parent="HUD/StartScreen"]
+layout_mode = 0
+offset_left = 270.0
+offset_top = 285.0
+offset_right = 450.0
+offset_bottom = 430.0
+texture = ExtResource("2_e2o6t")
+expand_mode = 1
+stretch_mode = 5
 
 [node name="HowToPanel" type="ColorRect" parent="HUD/StartScreen"]
 layout_mode = 0
 offset_left = 75.0
-offset_top = 410.0
+offset_top = 455.0
 offset_right = 645.0
-offset_bottom = 620.0
-color = Color(0.15, 0.24, 0.48, 0.9)
+offset_bottom = 650.0
+color = Color(0.22, 0.31, 0.72, 0.95)
 
 [node name="HowTo" type="Label" parent="HUD/StartScreen/HowToPanel"]
 layout_mode = 0
 offset_left = 30.0
-offset_top = 25.0
+offset_top = 18.0
 offset_right = 540.0
-offset_bottom = 185.0
+offset_bottom = 178.0
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_font_sizes/font_size = 24
-text = "TAP:  Jump\nHOLD 0.5s:  Swing to the nearest purple orb\nPOWER-UPS:  Rocket • Warp • Magnet • Knives"
+text = "HOW TO PLAY\n\nTAP  •  JUMP\nHOLD  •  SWING TO A PURPLE ORB\n\nGRAB POWER-UPS, COINS, AND STAY ABOVE LAVA"
 horizontal_alignment = 1
 vertical_alignment = 1
 
 [node name="MenuBest" type="Label" parent="HUD/StartScreen"]
 layout_mode = 0
 offset_left = 100.0
-offset_top = 675.0
+offset_top = 680.0
 offset_right = 620.0
-offset_bottom = 715.0
+offset_bottom = 720.0
 theme_override_colors/font_color = Color(1, 0.88, 0.33, 1)
 theme_override_font_sizes/font_size = 25
 text = "BEST RUN: 0 COINS"
 horizontal_alignment = 1
 
+[node name="MenuWallet" type="Label" parent="HUD/StartScreen"]
+layout_mode = 0
+offset_left = 100.0
+offset_top = 725.0
+offset_right = 620.0
+offset_bottom = 765.0
+theme_override_colors/font_color = Color(0.75, 0.9, 1, 1)
+theme_override_font_sizes/font_size = 20
+text = "COIN BANK: 0"
+horizontal_alignment = 1
+
 [node name="StartButton" type="Button" parent="HUD/StartScreen"]
 layout_mode = 0
 offset_left = 170.0
-offset_top = 755.0
+offset_top = 790.0
 offset_right = 550.0
-offset_bottom = 850.0
+offset_bottom = 885.0
 theme_override_colors/font_color = Color(0.08, 0.12, 0.28, 1)
 theme_override_colors/font_hover_color = Color(0.16, 0.04, 0.3, 1)
 theme_override_colors/font_pressed_color = Color(0.04, 0.06, 0.15, 1)
 theme_override_font_sizes/font_size = 34
-text = "PLAY"
+theme_override_styles/normal = SubResource("StylePrimaryNormal")
+theme_override_styles/hover = SubResource("StylePrimaryHover")
+text = "PLAY RUN"
+
+[node name="ShopButton" type="Button" parent="HUD/StartScreen"]
+layout_mode = 0
+offset_left = 235.0
+offset_top = 915.0
+offset_right = 485.0
+offset_bottom = 985.0
+theme_override_font_sizes/font_size = 26
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_styles/normal = SubResource("StyleSecondaryNormal")
+theme_override_styles/hover = SubResource("StyleSecondaryHover")
+text = "COLLECTION & CHESTS"
+
+[node name="ShopScreen" type="ColorRect" parent="HUD"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.25, 0.22, 0.64, 1)
+
+[node name="Title" type="Label" parent="HUD/ShopScreen"]
+layout_mode = 0
+offset_left = 70.0
+offset_top = 48.0
+offset_right = 650.0
+offset_bottom = 145.0
+theme_override_colors/font_color = Color(0.48, 0.95, 1, 1)
+theme_override_font_sizes/font_size = 46
+text = "COLLECTION"
+horizontal_alignment = 1
+
+[node name="Wallet" type="Label" parent="HUD/ShopScreen"]
+layout_mode = 0
+offset_left = 100.0
+offset_top = 125.0
+offset_right = 620.0
+offset_bottom = 205.0
+theme_override_colors/font_color = Color(1, 0.88, 0.33, 1)
+theme_override_font_sizes/font_size = 26
+text = "COIN BANK: 0"
+horizontal_alignment = 1
+
+[node name="ChestTabButton" type="Button" parent="HUD/ShopScreen"]
+layout_mode = 0
+offset_left = 105.0
+offset_top = 195.0
+offset_right = 345.0
+offset_bottom = 275.0
+theme_override_font_sizes/font_size = 23
+theme_override_colors/font_color = Color(1, 0.88, 0.33, 1)
+theme_override_styles/normal = SubResource("StyleGoldNormal")
+text = "CHESTS"
+
+[node name="JellyTabButton" type="Button" parent="HUD/ShopScreen"]
+layout_mode = 0
+offset_left = 375.0
+offset_top = 195.0
+offset_right = 615.0
+offset_bottom = 275.0
+theme_override_font_sizes/font_size = 23
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_styles/normal = SubResource("StyleSecondaryNormal")
+theme_override_styles/hover = SubResource("StyleSecondaryHover")
+text = "JELLIES"
+
+[node name="ChestCard" type="ColorRect" parent="HUD/ShopScreen"]
+layout_mode = 0
+offset_left = 85.0
+offset_top = 285.0
+offset_right = 635.0
+offset_bottom = 900.0
+color = Color(0.22, 0.35, 0.76, 0.96)
+
+[node name="ChestHeading" type="Label" parent="HUD/ShopScreen"]
+layout_mode = 0
+offset_left = 120.0
+offset_top = 315.0
+offset_right = 600.0
+offset_bottom = 360.0
+theme_override_colors/font_color = Color(1, 0.88, 0.33, 1)
+theme_override_font_sizes/font_size = 29
+text = "COMMON CHEST"
+horizontal_alignment = 1
+
+[node name="ChestDescription" type="Label" parent="HUD/ShopScreen"]
+layout_mode = 0
+offset_left = 125.0
+offset_top = 360.0
+offset_right = 595.0
+offset_bottom = 400.0
+theme_override_colors/font_color = Color(0.84, 0.93, 1, 1)
+theme_override_font_sizes/font_size = 18
+text = "Guaranteed new Jelly skin"
+horizontal_alignment = 1
+
+[node name="SkinList" type="GridContainer" parent="HUD/ShopScreen"]
+layout_mode = 0
+offset_left = 160.0
+offset_top = 285.0
+offset_right = 560.0
+offset_bottom = 920.0
+theme_override_constants/h_separation = 18
+theme_override_constants/v_separation = 12
+columns = 2
+
+[node name="SkinCatalog" type="TextureRect" parent="HUD/ShopScreen"]
+layout_mode = 0
+offset_left = 25.0
+offset_top = 245.0
+offset_right = 245.0
+offset_bottom = 520.0
+texture = ExtResource("4_skins")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="ChestIcon" type="TextureRect" parent="HUD/ShopScreen"]
+layout_mode = 0
+offset_left = 235.0
+offset_top = 410.0
+offset_right = 485.0
+offset_bottom = 600.0
+texture = ExtResource("5_chest")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="ChestPreview" type="TextureRect" parent="HUD/ShopScreen"]
+layout_mode = 0
+offset_left = 285.0
+offset_top = 605.0
+offset_right = 435.0
+offset_bottom = 735.0
+expand_mode = 1
+stretch_mode = 5
+
+[node name="ChestCarouselBackdrop" type="ColorRect" parent="HUD/ShopScreen"]
+layout_mode = 0
+offset_left = 100.0
+offset_top = 590.0
+offset_right = 620.0
+offset_bottom = 735.0
+color = Color(0.09, 0.13, 0.35, 0.92)
+mouse_filter = 2
+
+[node name="ChestCarousel" type="Control" parent="HUD/ShopScreen"]
+layout_mode = 0
+offset_left = 100.0
+offset_top = 600.0
+offset_right = 620.0
+offset_bottom = 730.0
+clip_contents = true
+mouse_filter = 2
+
+[node name="CenterMarker" type="ColorRect" parent="HUD/ShopScreen/ChestCarousel"]
+layout_mode = 0
+offset_left = 256.0
+offset_top = 0.0
+offset_right = 264.0
+offset_bottom = 130.0
+color = Color(1, 0.87, 0.26, 1)
+mouse_filter = 2
+z_index = 3
+
+[node name="Pointer" type="Label" parent="HUD/ShopScreen/ChestCarousel"]
+layout_mode = 0
+offset_left = 235.0
+offset_top = 0.0
+offset_right = 285.0
+offset_bottom = 30.0
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 24
+text = "▼"
+horizontal_alignment = 1
+mouse_filter = 2
+z_index = 4
+
+[node name="ChestResult" type="Label" parent="HUD/ShopScreen"]
+layout_mode = 0
+offset_left = 140.0
+offset_top = 750.0
+offset_right = 580.0
+offset_bottom = 800.0
+theme_override_colors/font_color = Color(1, 0.88, 0.33, 1)
+theme_override_font_sizes/font_size = 16
+text = "OPEN A CHEST!"
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="CommonChestButton" type="Button" parent="HUD/ShopScreen"]
+layout_mode = 0
+offset_left = 150.0
+offset_top = 820.0
+offset_right = 570.0
+offset_bottom = 880.0
+theme_override_colors/font_color = Color(0.12, 0.08, 0.2, 1)
+theme_override_font_sizes/font_size = 23
+theme_override_styles/normal = SubResource("StyleGoldNormal")
+text = "COMMON CHEST — 50 COINS"
+
+[node name="FutureChestRow" type="Control" parent="HUD/ShopScreen"]
+layout_mode = 0
+offset_left = 80.0
+offset_top = 905.0
+offset_right = 640.0
+offset_bottom = 1135.0
+
+[node name="Title" type="Label" parent="HUD/ShopScreen/FutureChestRow"]
+layout_mode = 0
+offset_right = 560.0
+offset_bottom = 28.0
+theme_override_colors/font_color = Color(0.72, 0.85, 1, 1)
+theme_override_font_sizes/font_size = 17
+text = "FOOD JELLIES: TAP UNCOMMON • MORE TIERS SOON"
+horizontal_alignment = 1
+
+[node name="Uncommon" type="TextureButton" parent="HUD/ShopScreen/FutureChestRow"]
+layout_mode = 0
+offset_left = 10.0
+offset_top = 35.0
+offset_right = 135.0
+offset_bottom = 160.0
+texture_normal = ExtResource("6_uncommon")
+ignore_texture_size = true
+stretch_mode = 5
+
+[node name="Rare" type="TextureRect" parent="HUD/ShopScreen/FutureChestRow"]
+layout_mode = 0
+offset_left = 150.0
+offset_top = 35.0
+offset_right = 275.0
+offset_bottom = 160.0
+texture = ExtResource("7_rare")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Epic" type="TextureRect" parent="HUD/ShopScreen/FutureChestRow"]
+layout_mode = 0
+offset_left = 285.0
+offset_top = 35.0
+offset_right = 410.0
+offset_bottom = 160.0
+texture = ExtResource("8_epic")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Legendary" type="TextureRect" parent="HUD/ShopScreen/FutureChestRow"]
+layout_mode = 0
+offset_left = 425.0
+offset_top = 35.0
+offset_right = 550.0
+offset_bottom = 160.0
+texture = ExtResource("9_legendary")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="UncommonLabel" type="Label" parent="HUD/ShopScreen/FutureChestRow"]
+layout_mode = 0
+offset_left = 0.0
+offset_top = 165.0
+offset_right = 145.0
+offset_bottom = 195.0
+theme_override_colors/font_color = Color(0.45, 1, 0.65, 1)
+theme_override_font_sizes/font_size = 14
+text = "UNCOMMON — 100"
+horizontal_alignment = 1
+
+[node name="RareLabel" type="Label" parent="HUD/ShopScreen/FutureChestRow"]
+layout_mode = 0
+offset_left = 140.0
+offset_top = 165.0
+offset_right = 285.0
+offset_bottom = 195.0
+theme_override_colors/font_color = Color(0.4, 0.82, 1, 1)
+theme_override_font_sizes/font_size = 14
+text = "RARE"
+horizontal_alignment = 1
+
+[node name="EpicLabel" type="Label" parent="HUD/ShopScreen/FutureChestRow"]
+layout_mode = 0
+offset_left = 275.0
+offset_top = 165.0
+offset_right = 420.0
+offset_bottom = 195.0
+theme_override_colors/font_color = Color(0.89, 0.49, 1, 1)
+theme_override_font_sizes/font_size = 14
+text = "EPIC"
+horizontal_alignment = 1
+
+[node name="LegendaryLabel" type="Label" parent="HUD/ShopScreen/FutureChestRow"]
+layout_mode = 0
+offset_left = 415.0
+offset_top = 165.0
+offset_right = 560.0
+offset_bottom = 195.0
+theme_override_colors/font_color = Color(1, 0.78, 0.24, 1)
+theme_override_font_sizes/font_size = 14
+text = "LEGENDARY"
+horizontal_alignment = 1
+
+[node name="BackButton" type="Button" parent="HUD/ShopScreen"]
+layout_mode = 0
+offset_left = 200.0
+offset_top = 1145.0
+offset_right = 520.0
+offset_bottom = 1225.0
+theme_override_font_sizes/font_size = 28
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_styles/normal = SubResource("StyleSecondaryNormal")
+theme_override_styles/hover = SubResource("StyleSecondaryHover")
+text = "← HOME"
 
 [node name="Block" type="ColorRect" parent="." unique_id=1780596874]
 offset_left = 300.0
@@ -210,6 +664,8 @@ scale = Vector2(0.08, 0.08)
 texture = ExtResource("2_e2o6t")
 
 [node name="BladeOrbit" type="Node2D" parent="."]
+
+[node name="BotSwings" type="Node2D" parent="."]
 
 [node name="SwingAnchors" type="Node2D" parent="." unique_id=159989641]
 
