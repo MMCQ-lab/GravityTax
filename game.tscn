@@ -1,0 +1,25 @@
+[gd_scene format=3 uid="uid://4qjf7waqhkv6"]
+
+[ext_resource type="Script" uid="uid://bqlsvqvfagkd7" path="res://game.gd" id="1_80nbo"]
+[ext_resource type="Texture2D" uid="uid://ba65lh7m3elma" path="res://images/cute cube face.png" id="2_e2o6t"]
+
+[node name="Game" type="Node2D" unique_id=437727441]
+script = ExtResource("1_80nbo")
+
+[node name="Block" type="ColorRect" parent="." unique_id=1780596874]
+offset_left = 300.0
+offset_top = 100.0
+offset_right = 370.0
+offset_bottom = 170.0
+color = Color(0.20077321, 0.99333614, 0.99999994, 1)
+
+[node name="jelly" type="Sprite2D" parent="Block" unique_id=1475031560]
+position = Vector2(35, 33)
+scale = Vector2(0.12, 0.12)
+texture = ExtResource("2_e2o6t")
+
+[node name="Floor" type="ColorRect" parent="." unique_id=1716519153]
+offset_top = 1100.0
+offset_right = 720.0
+offset_bottom = 1200.0
+color = Color(0.32941177, 1, 0.37254903, 1)
