@@ -46,6 +46,8 @@ const MMCQ_LAB_LOGO := preload("res://images/mmcq_lab_logo.png")
 
 @onready var height_score_label: Label = $HUD/HeightScore
 
+@onready var level_label: Label = $HUD/LevelIndicator
+
 @onready var bats: Node2D = $Bats
 
 @onready var power_ups: Node2D = $PowerUps
@@ -153,6 +155,13 @@ const MMCQ_LAB_LOGO := preload("res://images/mmcq_lab_logo.png")
 var map_width: float = 12000.0
 
 var floor_y: float = 9000.0
+
+# Sky Climb is split into tall, replayable courses. Height is banked at each
+# finish line so the score remains a single uninterrupted climb total.
+const CLIMB_LEVEL_HEIGHT := 16000.0
+const CLIMB_LEVEL_TOP_Y := 220.0
+var climb_level := 1
+var climb_height_bank := 0
 
 var jelly_swipe_tracking := false
 
@@ -551,6 +560,8 @@ func _ready() -> void:
 
 	height_score_label.hide()
 
+	level_label.hide()
+
 	tag_status_label.hide()
 
 	leaderboard_panel.hide()
@@ -831,8 +842,13 @@ func _physics_process(delta: float) -> void:
 
 		block_bottom = block.position.y + block.size.y
 
-	# The floor is lava: one touch ends the run instead of bouncing Jelly safely.
+	# Crossing the top of a Sky Climb course starts a tougher, freshly generated
+	# course before the ceiling collision can bounce Jelly back down.
+	if active_game_mode == "CLIMB" and get_player_center().y <= CLIMB_LEVEL_TOP_Y:
+		advance_climb_level()
+		return
 
+	# The floor is lava on level one and a bottomless void on later levels.
 	if block_bottom >= floor_top and velocity.y >= 0.0:
 
 		end_game()
@@ -941,7 +957,21 @@ func populate_world() -> void:
 
 		spawn_anchor(Vector2(randf_range(350.0, 580.0), randf_range(400.0, 650.0)))
 
-	for anchor_index in range(anchor_count - 1):
+	var generated_anchor_count := anchor_count
+	var climb_chain_count := 0
+	if active_game_mode == "CLIMB":
+		# A reliable route makes a course completable, while larger gaps make
+		# later levels progressively more demanding.
+		generated_anchor_count = max(260, anchor_count - (climb_level - 1) * 38)
+		var chain_position := get_start_pad_position() + Vector2(0.0, -760.0)
+		var chain_step := minf(460.0, 300.0 + float(climb_level - 1) * 24.0)
+		while chain_position.y > CLIMB_LEVEL_TOP_Y + 240.0:
+			chain_position.x = clampf(chain_position.x + randf_range(-330.0, 330.0), 180.0, map_width - 180.0)
+			spawn_anchor(chain_position)
+			climb_chain_count += 1
+			chain_position.y -= randf_range(chain_step * 0.78, chain_step)
+
+	for anchor_index in range(max(0, generated_anchor_count - 1 - climb_chain_count)):
 
 		spawn_anchor(Vector2(
 
@@ -987,7 +1017,11 @@ func populate_world() -> void:
 
 	bounce_pad_positions.append(get_start_pad_position() if active_game_mode == "CLIMB" else Vector2(390.0, 640.0))
 
-	for pad_index in range(bounce_pad_count - 1):
+	var generated_pad_count := bounce_pad_count
+	if active_game_mode == "CLIMB":
+		# Recovery pads become rarer as courses progress.
+		generated_pad_count = max(28, bounce_pad_count - (climb_level - 1) * 12)
+	for pad_index in range(generated_pad_count - 1):
 
 		bounce_pad_positions.append(Vector2(
 
@@ -999,7 +1033,8 @@ func populate_world() -> void:
 
 
 
-	for bat_index in range(bat_count):
+	var generated_bat_count := bat_count + (climb_level - 1) * 6 if active_game_mode == "CLIMB" else bat_count
+	for bat_index in range(generated_bat_count):
 
 		spawn_bat(Vector2(
 
@@ -1096,6 +1131,64 @@ func check_bounce_pads(block_bottom: float) -> bool:
 func get_start_pad_position() -> Vector2:
 
 	return Vector2(map_width * 0.5, floor_y - 180.0)
+
+
+func configure_climb_level() -> void:
+	# Every climb course uses the same tall vertical distance, then swaps its
+	# palette and hazard treatment when Jelly reaches the summit.
+	floor_y = CLIMB_LEVEL_HEIGHT
+	floor_rect.position = Vector2(0.0, floor_y)
+	floor_rect.size = Vector2(map_width, 180.0)
+
+	match (climb_level - 1) % 5:
+		0:
+			sky_top_color = Color("4bb5f2")
+			sky_bottom_color = Color("dff8ff")
+		1:
+			sky_top_color = Color("8454e8")
+			sky_bottom_color = Color("f5b7ff")
+		2:
+			sky_top_color = Color("153c88")
+			sky_bottom_color = Color("55c5d7")
+		3:
+			sky_top_color = Color("d85a80")
+			sky_bottom_color = Color("ffc777")
+		_:
+			sky_top_color = Color("155e72")
+			sky_bottom_color = Color("8ce3bd")
+
+	# Level one has a visible lava floor. Later levels fall into a dark void,
+	# while retaining the same fail boundary for the physics.
+	floor_rect.color = Color("e64018") if climb_level == 1 else Color("09051c")
+	level_label.text = "LEVEL %d" % climb_level
+
+
+func configure_standard_world() -> void:
+	floor_y = 9000.0
+	floor_rect.position = Vector2(0.0, floor_y)
+	floor_rect.size = Vector2(map_width, 120.0)
+	floor_rect.color = Color("e64018")
+	sky_top_color = Color("4bb5f2")
+	sky_bottom_color = Color("dff8ff")
+
+
+func advance_climb_level() -> void:
+	# Bank confirmed peak progress, then rebuild at the bottom of a new course.
+	update_height_score()
+	climb_height_bank = height_score
+	climb_level += 1
+	velocity = Vector2.ZERO
+	is_swinging = false
+	swing_anchor = null
+	swing_rope.hide()
+	bounce_pad_next_trigger_time = 0.0
+	configure_climb_level()
+	populate_world()
+	place_player_on_start_pad()
+	run_start_height_y = get_player_center().y
+	previous_player_center = get_player_center()
+	update_height_score()
+	show_power_message("LEVEL %d  •  CLIMB HIGHER!" % climb_level)
 
 
 
@@ -2301,6 +2394,8 @@ func start_game() -> void:
 
 	height_score_label.visible = active_game_mode == "CLIMB"
 
+	level_label.visible = active_game_mode == "CLIMB"
+
 	tag_status_label.visible = active_game_mode == "TAG"
 
 	# The coin leaderboard only applies to the score-chasing mode.
@@ -2319,11 +2414,15 @@ func restart_game() -> void:
 	velocity = Vector2.ZERO
 
 	if active_game_mode == "CLIMB":
-
+		climb_level = 1
+		climb_height_bank = 0
+		configure_climb_level()
 		place_player_on_start_pad()
 
 	else:
-
+		climb_level = 1
+		climb_height_bank = 0
+		configure_standard_world()
 		block.position = Vector2(300.0, 100.0)
 
 	block.rotation = 0.0
@@ -2445,6 +2544,8 @@ func return_to_main_menu() -> void:
 	kill_counter.hide()
 
 	height_score_label.hide()
+
+	level_label.hide()
 
 	tag_status_label.hide()
 
@@ -2608,9 +2709,10 @@ func update_kill_counter() -> void:
 
 func update_height_score() -> void:
 
-	# The score starts at zero and rises forever as Jelly climbs upward.
-
-	height_score = max(height_score, max(0, int((run_start_height_y - get_player_center().y) / 10.0)))
+	# Banked height survives each completed Sky Climb course, so the center HUD
+	# number never falls back to zero when the next level begins.
+	var current_course_height: int = maxi(0, int((run_start_height_y - get_player_center().y) / 10.0))
+	height_score = max(height_score, climb_height_bank + current_course_height)
 
 	height_score_label.text = str(height_score)
 
@@ -3732,9 +3834,9 @@ func _draw() -> void:
 
 
 
-	# Bright rolling embers make the lethal floor immediately readable as lava.
-
-	if visible_bounds.end.y >= floor_y - 70.0:
+	# Bright rolling embers make level one's lava readable. Later Sky Climb
+	# floors are deliberately quiet voids instead.
+	if visible_bounds.end.y >= floor_y - 70.0 and not (active_game_mode == "CLIMB" and climb_level > 1):
 
 		var ember_start: int = max(0, int(visible_bounds.position.x / 56.0) * 56)
 
