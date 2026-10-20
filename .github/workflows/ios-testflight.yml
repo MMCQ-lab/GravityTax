@@ -38,10 +38,11 @@ jobs:
         with:
           xcode-version: "16.2"
 
-      - name: Install Godot and matching export templates
-        uses: firebelley/setup-godot@v1.1.0
+            - name: Install Godot and matching export templates
+        uses: chickensoft-games/setup-godot@v2.4.3
         with:
-          godot-version: ${{ env.GODOT_VERSION }}
+          version: ${{ env.GODOT_VERSION }}
+          use-dotnet: false
           include-templates: true
 
       - name: Decode signing certificate and provisioning profile
