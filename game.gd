@@ -18,6 +18,18 @@ const FOOD_SKIN_TEXTURES := [
 	preload("res://images/food_cupcake_jelly.png"),
 	preload("res://images/food_watermelon_jelly.png")
 ]
+const EPIC_SKIN_TEXTURES := [
+	preload("res://images/epic_pirate_jelly.png"),
+	preload("res://images/epic_ninja_jelly.png"),
+	preload("res://images/epic_space_jelly.png"),
+	preload("res://images/epic_speed_jelly.png"),
+	preload("res://images/epic_forest_jelly.png"),
+	preload("res://images/epic_wizard_jelly.png"),
+	preload("res://images/epic_dragon_jelly.png"),
+	preload("res://images/epic_arcade_jelly.png"),
+	preload("res://images/epic_mech_jelly.png"),
+	preload("res://images/epic_vigilante_jelly.png")
+]
 const SCORE_SAVE_PATH := "user://gravity_tax_scores.cfg"
 
 @onready var block: ColorRect = $Block
@@ -29,6 +41,7 @@ const SCORE_SAVE_PATH := "user://gravity_tax_scores.cfg"
 @onready var bats: Node2D = $Bats
 @onready var power_ups: Node2D = $PowerUps
 @onready var blade_orbit: Node2D = $BladeOrbit
+@onready var swing_rope: Line2D = $SwingRope
 @onready var bot_swings: Node2D = $BotSwings
 @onready var game_over_screen: ColorRect = $HUD/GameOverScreen
 @onready var game_over_best_label: Label = $HUD/GameOverScreen/GameOverBest
@@ -48,9 +61,11 @@ const SCORE_SAVE_PATH := "user://gravity_tax_scores.cfg"
 @onready var shop_button: Button = $HUD/StartScreen/ShopButton
 @onready var shop_back_button: Button = $HUD/ShopScreen/BackButton
 @onready var shop_wallet_label: Label = $HUD/ShopScreen/Wallet
-@onready var skin_list: GridContainer = $HUD/ShopScreen/SkinList
+@onready var skin_scroll: ScrollContainer = $HUD/ShopScreen/SkinScroll
+@onready var skin_list: GridContainer = $HUD/ShopScreen/SkinScroll/SkinList
 @onready var chest_tab_button: Button = $HUD/ShopScreen/ChestTabButton
 @onready var jelly_tab_button: Button = $HUD/ShopScreen/JellyTabButton
+@onready var coins_tab_button: Button = $HUD/ShopScreen/CoinsTabButton
 @onready var skin_catalog: TextureRect = $HUD/ShopScreen/SkinCatalog
 @onready var chest_icon: TextureRect = $HUD/ShopScreen/ChestIcon
 @onready var chest_card: ColorRect = $HUD/ShopScreen/ChestCard
@@ -58,15 +73,26 @@ const SCORE_SAVE_PATH := "user://gravity_tax_scores.cfg"
 @onready var chest_description: Label = $HUD/ShopScreen/ChestDescription
 @onready var future_chest_row: Control = $HUD/ShopScreen/FutureChestRow
 @onready var common_chest_button: Button = $HUD/ShopScreen/CommonChestButton
+@onready var common_chest_picker: TextureButton = $HUD/ShopScreen/FutureChestRow/Common
 @onready var uncommon_chest_button: TextureButton = $HUD/ShopScreen/FutureChestRow/Uncommon
+@onready var rare_chest_picker: TextureButton = $HUD/ShopScreen/FutureChestRow/Rare
+@onready var epic_chest_picker: TextureButton = $HUD/ShopScreen/FutureChestRow/Epic
+@onready var legendary_chest_picker: TextureButton = $HUD/ShopScreen/FutureChestRow/Legendary
 @onready var chest_result_label: Label = $HUD/ShopScreen/ChestResult
 @onready var chest_preview: TextureRect = $HUD/ShopScreen/ChestPreview
 @onready var chest_carousel_backdrop: ColorRect = $HUD/ShopScreen/ChestCarouselBackdrop
 @onready var chest_carousel: Control = $HUD/ShopScreen/ChestCarousel
+@onready var ad_panel: ColorRect = $HUD/ShopScreen/AdPanel
+@onready var ad_reward_button: Button = $HUD/ShopScreen/AdPanel/AdRewardButton
+@onready var ad_status_label: Label = $HUD/ShopScreen/AdPanel/AdStatus
 
 # World dimensions are intentionally much larger than the phone viewport.
 var map_width: float = 12000.0
 var floor_y: float = 9000.0
+var jelly_swipe_tracking := false
+var jelly_swipe_last_y := 0.0
+var jelly_swipe_distance := 0.0
+var jelly_swipe_release_msec := 0
 var sky_top_color := Color("4bb5f2")
 var sky_bottom_color := Color("dff8ff")
 var anchor_count := 320
@@ -94,19 +120,40 @@ var skin_definitions: Array[Dictionary] = [
 	{"name": "Donut Jelly", "tier": "Uncommon"},
 	{"name": "Strawberry Jelly", "tier": "Uncommon"},
 	{"name": "Cupcake Jelly", "tier": "Uncommon"},
-	{"name": "Watermelon Jelly", "tier": "Uncommon"}
+	{"name": "Watermelon Jelly", "tier": "Uncommon"},
+	{"name": "Straw Hat Jelly", "tier": "Epic"},
+	{"name": "Cyber Ninja Jelly", "tier": "Epic"},
+	{"name": "Space Ranger Jelly", "tier": "Epic"},
+	{"name": "Speed Racer Jelly", "tier": "Epic"},
+	{"name": "Forest King Jelly", "tier": "Epic"},
+	{"name": "Cosmic Wizard Jelly", "tier": "Epic"},
+	{"name": "Dragon Warrior Jelly", "tier": "Epic"},
+	{"name": "Arcade Alien Jelly", "tier": "Epic"},
+	{"name": "Mech Pilot Jelly", "tier": "Epic"},
+	{"name": "Moon Vigilante Jelly", "tier": "Epic"}
 ]
 var bot_names: Array[String] = ["Bloop", "Mochi", "Pip", "Zing", "Wobble", "Nori", "Fizz", "Taffy", "Pebble", "Comet", "Pogo", "Doodle"]
 var common_chest_cost := 50
 var uncommon_chest_cost := 100
+var selected_chest_tier := "COMMON"
+var chest_definitions: Dictionary = {
+	"COMMON": {"cost": 50, "rewards": [1, 2, 3, 4, 5, 6, 7, 8, 9], "texture": COMMON_CHEST_TEXTURE, "description": "Guaranteed new classic Jelly skin", "available": true},
+	"UNCOMMON": {"cost": 100, "rewards": [10, 11, 12, 13, 14], "texture": UNCOMMON_CHEST_TEXTURE, "description": "Guaranteed new food Jelly skin", "available": true},
+	"RARE": {"cost": 0, "rewards": [], "texture": preload("res://images/rare_chest.png"), "description": "Rewards coming soon", "available": false},
+	"EPIC": {"cost": 250, "rewards": [15, 16, 17, 18, 19, 20, 21, 22, 23, 24], "texture": preload("res://images/epic_chest.png"), "description": "Guaranteed pop-culture-inspired Jelly", "available": true},
+	"LEGENDARY": {"cost": 0, "rewards": [], "texture": preload("res://images/legendary_chest.png"), "description": "Rewards coming soon", "available": false}
+}
 var chest_rolling := false
 var chest_roll_elapsed := 0.0
 var chest_next_tick := 0.0
 var chest_target_skin := 0
 var chest_reward_pool: Array[int] = []
-var chest_carousel_items: Array[TextureRect] = []
+var chest_carousel_items: Array[TextureButton] = []
 var chest_carousel_target_index := 24
 var chest_carousel_final_offset := 0.0
+var redraw_timer := 0.0
+var bot_rope_check_timer := 0.0
+var leaderboard_update_timer := 0.0
 var bat_count := 28
 var swing_bot_count := 42
 var bat_chase_speed := 540.0
@@ -195,11 +242,19 @@ func _ready() -> void:
 	start_button.pressed.connect(start_game)
 	shop_button.pressed.connect(open_shop)
 	shop_back_button.pressed.connect(close_shop)
-	common_chest_button.pressed.connect(open_common_chest)
-	uncommon_chest_button.pressed.connect(open_uncommon_chest)
+	common_chest_button.pressed.connect(open_selected_chest)
+	common_chest_picker.pressed.connect(select_chest.bind("COMMON"))
+	uncommon_chest_button.pressed.connect(select_chest.bind("UNCOMMON"))
+	rare_chest_picker.pressed.connect(select_chest.bind("RARE"))
+	epic_chest_picker.pressed.connect(select_chest.bind("EPIC"))
+	legendary_chest_picker.pressed.connect(select_chest.bind("LEGENDARY"))
 	chest_tab_button.pressed.connect(set_shop_tab.bind("chests"))
 	jelly_tab_button.pressed.connect(set_shop_tab.bind("jellies"))
+	coins_tab_button.pressed.connect(set_shop_tab.bind("coins"))
+	ad_reward_button.pressed.connect(claim_test_ad_reward)
+	skin_scroll.scroll_deadzone = 8
 	build_skin_shop()
+	select_chest("COMMON")
 
 
 func _process(delta: float) -> void:
@@ -218,7 +273,12 @@ func _process(delta: float) -> void:
 
 
 func _physics_process(delta: float) -> void:
-	queue_redraw()
+	# The world art is procedural; redraw at 20 FPS instead of rebuilding the
+	# entire 12,000px scene on every physics step.
+	redraw_timer += delta
+	if redraw_timer >= 0.05:
+		redraw_timer = 0.0
+		queue_redraw()
 	if not game_started:
 		return
 	if power_message_time > 0.0:
@@ -286,6 +346,7 @@ func _physics_process(delta: float) -> void:
 	camera.global_position = block.global_position + block.size / 2.0
 	collect_coins(delta)
 	update_bats(delta)
+	update_swing_rope()
 
 
 func populate_world() -> void:
@@ -391,6 +452,7 @@ func spawn_swing_bot(anchor_position: Vector2, bot_number: int) -> void:
 	bot.set_meta("name", bot_names.pick_random())
 	bot.set_meta("magnet_until", 0.0)
 	bot.set_meta("knife_until", 0.0)
+	bot.set_meta("next_collect_at", world_elapsed + randf_range(0.0, 0.12))
 
 	var body := ColorRect.new()
 	body.position = Vector2(-24.0, -24.0)
@@ -403,7 +465,7 @@ func spawn_swing_bot(anchor_position: Vector2, bot_number: int) -> void:
 	var bot_skin_texture := create_skin_texture(bot_skin_id)
 	sprite.texture = bot_skin_texture
 	sprite.position = Vector2(24.0, 24.0)
-	sprite.scale = get_skin_sprite_scale(bot_skin_texture)
+	sprite.scale = get_skin_sprite_scale(bot_skin_id, bot_skin_texture)
 	body.add_child(sprite)
 
 	var name_label := Label.new()
@@ -496,6 +558,14 @@ func update_orbiting_knives() -> void:
 		blade.show()
 
 
+func update_swing_rope() -> void:
+	if is_swinging and is_instance_valid(swing_anchor):
+		swing_rope.points = PackedVector2Array([swing_anchor.global_position, get_player_center()])
+		swing_rope.show()
+	else:
+		swing_rope.hide()
+
+
 func hide_orbiting_knives() -> void:
 	for blade in orbiting_knives:
 		blade.hide()
@@ -527,9 +597,11 @@ func show_power_message(message: String) -> void:
 
 func animate_world_decorations(delta: float) -> void:
 	# Gentle motion makes nearby targets easier to notice without changing their collision area.
+	var camera_position := camera.global_position
+	var animate_range_squared := 1600.0 * 1600.0
 	for anchor_node in swing_anchors.get_children():
 		var anchor := anchor_node as Sprite2D
-		if anchor:
+		if anchor and anchor.global_position.distance_squared_to(camera_position) <= animate_range_squared:
 			var pulse: float = 1.0 + sin(world_elapsed * 2.4 + float(anchor.get_meta("pulse_offset"))) * 0.09
 			anchor.scale = Vector2.ONE * 0.025 * pulse
 			anchor.rotation += delta * 0.35
@@ -603,10 +675,20 @@ func update_swing_bots(delta: float) -> void:
 		var name_label := bot.get_node_or_null("NameLabel") as Label
 		if name_label:
 			name_label.rotation = -bot.rotation
-		collect_power_ups_for_bot(bot)
-		collect_coins_for_bot(bot, delta)
-	bots_cut_ropes()
-	update_leaderboard()
+		# Stagger expensive pickup scans across bots rather than having every bot
+		# scan every coin and power-up 60 times per second.
+		if world_elapsed >= float(bot.get_meta("next_collect_at")):
+			collect_power_ups_for_bot(bot)
+			collect_coins_for_bot(bot, delta)
+			bot.set_meta("next_collect_at", world_elapsed + 0.12)
+	bot_rope_check_timer -= delta
+	if bot_rope_check_timer <= 0.0:
+		bot_rope_check_timer = 0.10
+		bots_cut_ropes()
+	leaderboard_update_timer -= delta
+	if leaderboard_update_timer <= 0.0:
+		leaderboard_update_timer = 0.25
+		update_leaderboard()
 
 
 func player_hits_bot_rope(anchor_position: Vector2, rope_end: Vector2) -> bool:
@@ -768,6 +850,7 @@ func end_game() -> void:
 	velocity = Vector2.ZERO
 	is_swinging = false
 	swing_anchor = null
+	swing_rope.hide()
 	if flip_tween and flip_tween.is_running():
 		flip_tween.kill()
 	if jelly_tween and jelly_tween.is_running():
@@ -803,6 +886,7 @@ func restart_game() -> void:
 	block.scale = Vector2.ONE
 	is_swinging = false
 	swing_anchor = null
+	swing_rope.hide()
 	is_pointer_held = false
 	coins_collected = 0
 	bat_kills = 0
@@ -837,6 +921,7 @@ func return_to_main_menu() -> void:
 	velocity = Vector2.ZERO
 	is_swinging = false
 	swing_anchor = null
+	swing_rope.hide()
 	is_pointer_held = false
 	power_message.hide()
 	hide_orbiting_knives()
@@ -970,19 +1055,21 @@ func apply_selected_skin() -> void:
 	# Each skin is a real generated texture tile, not a color tint of the base Jelly.
 	var selected_skin_texture := create_skin_texture(selected_skin)
 	jelly_sprite.texture = selected_skin_texture
-	jelly_sprite.scale = get_skin_sprite_scale(selected_skin_texture)
+	jelly_sprite.scale = get_skin_sprite_scale(selected_skin, selected_skin_texture)
 	jelly_sprite.modulate = Color.WHITE
 	block.color = Color.TRANSPARENT
 
 
-func get_skin_sprite_scale(skin_texture: Texture2D) -> Vector2:
-	# Generated skins can have different source resolutions. Normalize by their
-	# longest edge so every Jelly has the same on-screen size.
-	var largest_edge := maxf(float(skin_texture.get_width()), float(skin_texture.get_height()))
-	return Vector2.ONE * (100.0 / largest_edge)
+func get_skin_sprite_scale(skin_id: int, skin_texture: Texture2D) -> Vector2:
+	# Keep each texture's aspect ratio intact. Original atlas skins retain their
+	# pre-change scale; food skins are reduced proportionally to the same width.
+	var source_edge := 512.0 if skin_id < 10 else maxf(float(skin_texture.get_width()), float(skin_texture.get_height()))
+	return Vector2.ONE * (102.4 / source_edge)
 
 
 func create_skin_texture(skin_id: int) -> Texture2D:
+	if skin_id >= 15:
+		return EPIC_SKIN_TEXTURES[skin_id - 15]
 	if skin_id >= 10:
 		return FOOD_SKIN_TEXTURES[skin_id - 10]
 	var atlas_texture := AtlasTexture.new()
@@ -1007,19 +1094,42 @@ func build_skin_shop() -> void:
 		var owned := unlocked_skins.has(skin_id)
 		if skin_id == selected_skin:
 			skin_button.tooltip_text = "%s — EQUIPPED" % str(skin["name"])
+			var equipped_outline := StyleBoxFlat.new()
+			equipped_outline.bg_color = Color(1.0, 1.0, 1.0, 0.08)
+			equipped_outline.border_width_left = 4
+			equipped_outline.border_width_top = 4
+			equipped_outline.border_width_right = 4
+			equipped_outline.border_width_bottom = 4
+			equipped_outline.border_color = Color.WHITE
+			equipped_outline.corner_radius_top_left = 14
+			equipped_outline.corner_radius_top_right = 14
+			equipped_outline.corner_radius_bottom_right = 14
+			equipped_outline.corner_radius_bottom_left = 14
+			equipped_outline.shadow_color = Color(1.0, 1.0, 1.0, 0.82)
+			equipped_outline.shadow_size = 9
+			var outline_panel := Panel.new()
+			outline_panel.position = Vector2(2.0, 2.0)
+			outline_panel.size = skin_button.custom_minimum_size - Vector2(4.0, 4.0)
+			outline_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			outline_panel.add_theme_stylebox_override("panel", equipped_outline)
+			skin_button.add_child(outline_panel)
 		elif owned:
 			skin_button.tooltip_text = "%s — OWNED" % str(skin["name"])
 		else:
 			skin_button.modulate = Color(0.28, 0.28, 0.32, 1.0)
 			skin_button.tooltip_text = "%s — LOCKED" % str(skin["name"])
-		skin_button.pressed.connect(buy_or_equip_skin.bind(skin_id))
+		skin_button.pressed.connect(_on_skin_button_pressed.bind(skin_id))
 		skin_list.add_child(skin_button)
 	shop_wallet_label.text = "COIN BANK: %d" % wallet_coins
-	common_chest_button.text = "COMMON CHEST — %d COINS" % common_chest_cost
-	common_chest_button.disabled = chest_rolling
-	uncommon_chest_button.disabled = chest_rolling
-	if not chest_rolling:
-		chest_preview.texture = create_skin_texture(selected_skin)
+	refresh_chest_selection_ui()
+	chest_preview.hide()
+
+
+func _on_skin_button_pressed(skin_id: int) -> void:
+	# A swipe ends with a touch release. Do not treat that release as selecting a Jelly.
+	if Time.get_ticks_msec() < jelly_swipe_release_msec:
+		return
+	buy_or_equip_skin(skin_id)
 
 
 func buy_or_equip_skin(skin_id: int) -> void:
@@ -1033,12 +1143,56 @@ func buy_or_equip_skin(skin_id: int) -> void:
 	build_skin_shop()
 
 
-func open_common_chest() -> void:
-	open_chest("COMMON", common_chest_cost, [1, 2, 3, 4, 5, 6, 7, 8, 9], COMMON_CHEST_TEXTURE, "Guaranteed new classic Jelly skin")
+func select_chest(tier_name: String) -> void:
+	selected_chest_tier = tier_name
+	refresh_chest_selection_ui()
+	var chest_data: Dictionary = chest_definitions[selected_chest_tier]
+	if bool(chest_data["available"]):
+		var preview_rewards: Array[int] = []
+		for reward_id in chest_data["rewards"]:
+			preview_rewards.append(int(reward_id))
+		prepare_chest_carousel(preview_rewards)
+		chest_carousel_backdrop.show()
+		chest_carousel.show()
+		chest_result_label.text = "TAP OPEN TO SPIN"
+	else:
+		clear_chest_carousel()
+		chest_carousel_backdrop.hide()
+		chest_carousel.hide()
 
 
-func open_uncommon_chest() -> void:
-	open_chest("UNCOMMON", uncommon_chest_cost, [10, 11, 12, 13, 14], UNCOMMON_CHEST_TEXTURE, "Guaranteed new food Jelly skin")
+func refresh_chest_selection_ui() -> void:
+	var chest_data: Dictionary = chest_definitions[selected_chest_tier]
+	var is_available: bool = bool(chest_data["available"])
+	chest_icon.texture = chest_data["texture"]
+	chest_heading.text = "%s CHEST" % selected_chest_tier
+	chest_description.text = str(chest_data["description"])
+	common_chest_button.text = "OPEN %s CHEST — %d COINS" % [selected_chest_tier, int(chest_data["cost"])] if is_available else "%s CHEST — COMING SOON" % selected_chest_tier
+	common_chest_button.disabled = chest_rolling or not is_available
+	var pickers: Array[TextureButton] = [common_chest_picker, uncommon_chest_button, rare_chest_picker, epic_chest_picker, legendary_chest_picker]
+	var picker_tiers: Array[String] = ["COMMON", "UNCOMMON", "RARE", "EPIC", "LEGENDARY"]
+	for picker_index in range(pickers.size()):
+		pickers[picker_index].disabled = chest_rolling
+		pickers[picker_index].modulate = Color.WHITE if picker_tiers[picker_index] == selected_chest_tier else Color(0.55, 0.55, 0.65, 1.0)
+
+
+func open_selected_chest() -> void:
+	var chest_data: Dictionary = chest_definitions[selected_chest_tier]
+	if not bool(chest_data["available"]):
+		chest_result_label.text = "%s REWARDS ARE COMING SOON" % selected_chest_tier
+		return
+	var rewards: Array[int] = []
+	for reward_id in chest_data["rewards"]:
+		rewards.append(int(reward_id))
+	open_chest(selected_chest_tier, int(chest_data["cost"]), rewards, chest_data["texture"], str(chest_data["description"]))
+
+
+func claim_test_ad_reward() -> void:
+	wallet_coins += 10
+	ad_status_label.text = "+10 COINS ADDED — TEST MODE"
+	save_profile()
+	update_coin_counter()
+	build_skin_shop()
 
 
 func open_chest(tier_name: String, cost: int, reward_pool: Array[int], chest_texture: Texture2D, description: String) -> void:
@@ -1060,7 +1214,8 @@ func open_chest(tier_name: String, cost: int, reward_pool: Array[int], chest_tex
 	chest_roll_elapsed = 0.0
 	chest_next_tick = 0.0
 	chest_rolling = true
-	prepare_chest_carousel(reward_pool)
+	refresh_chest_selection_ui()
+	prepare_chest_carousel(reward_pool, chest_target_skin)
 	chest_icon.texture = chest_texture
 	chest_heading.text = "%s CHEST" % tier_name
 	chest_description.text = description
@@ -1073,23 +1228,30 @@ func open_chest(tier_name: String, cost: int, reward_pool: Array[int], chest_tex
 	chest_carousel.show()
 
 
-func prepare_chest_carousel(reward_pool: Array[int]) -> void:
+func clear_chest_carousel() -> void:
 	for carousel_item in chest_carousel_items:
 		carousel_item.queue_free()
 	chest_carousel_items.clear()
-	var item_spacing := 112.0
+
+
+func prepare_chest_carousel(reward_pool: Array[int], final_skin_id: int = -1) -> void:
+	clear_chest_carousel()
+	var item_spacing := 70.0
 	chest_carousel_target_index = 24
-	chest_carousel_final_offset = chest_carousel_target_index * item_spacing + 50.0 - chest_carousel.size.x * 0.5
+	chest_carousel_final_offset = chest_carousel_target_index * item_spacing + 29.0 - chest_carousel.size.x * 0.5
 	for item_index in range(30):
 		var reward_id: int = reward_pool.pick_random()
-		if item_index == chest_carousel_target_index:
-			reward_id = chest_target_skin
-		var carousel_item := TextureRect.new()
-		carousel_item.texture = create_skin_texture(reward_id)
-		carousel_item.position = Vector2(item_index * item_spacing, 10.0)
-		carousel_item.size = Vector2(100.0, 110.0)
-		carousel_item.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		carousel_item.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		if item_index == chest_carousel_target_index and final_skin_id >= 0:
+			reward_id = final_skin_id
+		# TextureButton with STRETCH_SCALE reliably fits both atlas tiles and the
+		# generated food PNGs inside a fixed carousel card.
+		var carousel_item := TextureButton.new()
+		carousel_item.texture_normal = create_skin_texture(reward_id)
+		# Fixed 58 × 64 cards keep every Jelly inside the case-opening strip.
+		carousel_item.position = Vector2(item_index * item_spacing, 33.0)
+		carousel_item.size = Vector2(58.0, 64.0)
+		carousel_item.ignore_texture_size = true
+		carousel_item.stretch_mode = TextureButton.STRETCH_SCALE
 		carousel_item.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		chest_carousel.add_child(carousel_item)
 		chest_carousel_items.append(carousel_item)
@@ -1100,17 +1262,18 @@ func update_chest_carousel(progress: float) -> void:
 	var eased_progress := 1.0 - pow(1.0 - progress, 3.0)
 	var offset := chest_carousel_final_offset * eased_progress
 	for item_index in range(chest_carousel_items.size()):
-		chest_carousel_items[item_index].position.x = item_index * 112.0 - offset
+		chest_carousel_items[item_index].position.x = item_index * 70.0 - offset
 
 
 func finish_chest() -> void:
 	chest_rolling = false
 	unlocked_skins.append(chest_target_skin)
 	selected_skin = chest_target_skin
-	chest_preview.texture = create_skin_texture(chest_target_skin)
-	chest_preview.show()
-	chest_carousel_backdrop.hide()
-	chest_carousel.hide()
+	# Keep the winning Jelly centered in the spinner instead of switching to a
+	# separate large cube preview.
+	chest_preview.hide()
+	chest_carousel_backdrop.show()
+	chest_carousel.show()
 	chest_result_label.text = "UNLOCKED: %s!" % str(skin_definitions[chest_target_skin]["name"])
 	apply_selected_skin()
 	save_profile()
@@ -1131,12 +1294,56 @@ func close_shop() -> void:
 	start_screen.show()
 
 
+func _handle_jelly_swipe(event: InputEvent) -> bool:
+	if not skin_scroll.visible:
+		return false
+	if event is InputEventScreenTouch:
+		if event.pressed:
+			jelly_swipe_tracking = true
+			jelly_swipe_last_y = event.position.y
+			jelly_swipe_distance = 0.0
+		elif jelly_swipe_tracking:
+			jelly_swipe_tracking = false
+			if jelly_swipe_distance > 10.0:
+				jelly_swipe_release_msec = Time.get_ticks_msec() + 180
+				return true
+	elif event is InputEventScreenDrag and jelly_swipe_tracking:
+		_drag_jelly_list(event.position.y)
+		return jelly_swipe_distance > 10.0
+	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if event.pressed:
+			jelly_swipe_tracking = true
+			jelly_swipe_last_y = event.position.y
+			jelly_swipe_distance = 0.0
+		elif jelly_swipe_tracking:
+			jelly_swipe_tracking = false
+			if jelly_swipe_distance > 10.0:
+				jelly_swipe_release_msec = Time.get_ticks_msec() + 180
+				return true
+	elif event is InputEventMouseMotion and jelly_swipe_tracking and event.button_mask & MOUSE_BUTTON_MASK_LEFT:
+		_drag_jelly_list(event.position.y)
+		return jelly_swipe_distance > 10.0
+	return false
+
+
+func _drag_jelly_list(current_y: float) -> void:
+	var delta_y := current_y - jelly_swipe_last_y
+	if is_zero_approx(delta_y):
+		return
+	jelly_swipe_distance += absf(delta_y)
+	jelly_swipe_last_y = current_y
+	var scroll_bar := skin_scroll.get_v_scroll_bar()
+	scroll_bar.value -= delta_y
+
+
 func set_shop_tab(tab_name: String) -> void:
 	var showing_chests := tab_name == "chests"
+	var showing_jellies := tab_name == "jellies"
+	var showing_coins := tab_name == "coins"
 	common_chest_button.show() if showing_chests else common_chest_button.hide()
-	chest_preview.show() if showing_chests else chest_preview.hide()
-	chest_carousel_backdrop.show() if showing_chests and chest_rolling else chest_carousel_backdrop.hide()
-	chest_carousel.show() if showing_chests and chest_rolling else chest_carousel.hide()
+	chest_preview.hide()
+	chest_carousel_backdrop.show() if showing_chests and (chest_rolling or not chest_carousel_items.is_empty()) else chest_carousel_backdrop.hide()
+	chest_carousel.show() if showing_chests and (chest_rolling or not chest_carousel_items.is_empty()) else chest_carousel.hide()
 	chest_result_label.show() if showing_chests else chest_result_label.hide()
 	skin_catalog.hide()
 	chest_icon.show() if showing_chests else chest_icon.hide()
@@ -1144,12 +1351,23 @@ func set_shop_tab(tab_name: String) -> void:
 	chest_heading.show() if showing_chests else chest_heading.hide()
 	chest_description.show() if showing_chests else chest_description.hide()
 	future_chest_row.show() if showing_chests else future_chest_row.hide()
-	skin_list.show() if not showing_chests else skin_list.hide()
+	skin_scroll.show() if showing_jellies else skin_scroll.hide()
+	if showing_jellies:
+		skin_scroll.get_v_scroll_bar().value = 0.0
+	ad_panel.show() if showing_coins else ad_panel.hide()
 	chest_tab_button.disabled = showing_chests
-	jelly_tab_button.disabled = not showing_chests
+	jelly_tab_button.disabled = showing_jellies
+	coins_tab_button.disabled = showing_coins
 
 
 func _input(event: InputEvent) -> void:
+	# iPhone browsers can send touch events directly to the viewport instead of
+	# the nested ScrollContainer. Read raw input while the collection is open so
+	# a drag works from any part of the Jelly page, including directly on a card.
+	if shop_screen.visible:
+		if _handle_jelly_swipe(event):
+			get_viewport().set_input_as_handled()
+		return
 	if not game_started or game_over:
 		return
 
@@ -1286,47 +1504,56 @@ func launch() -> void:
 
 
 func _draw() -> void:
-	# Paint the large world with a soft sky gradient behind the play area.
+	# Only draw the part of the world currently on screen. The old version drew
+	# the entire 12,000px map every frame, even though a phone sees only a slice.
+	var viewport_size := get_viewport_rect().size
+	var visible_size := viewport_size / camera.zoom
+	var visible_bounds := Rect2(camera.global_position - visible_size * 0.6, visible_size * 1.2)
+	var expanded_bounds := visible_bounds.grow(90.0)
+
+	# Paint a soft sky gradient behind the visible play area.
 	var sky_start_y := -1600.0
 	var sky_height := floor_y - sky_start_y + 120.0
-	var sky_strips := 96
+	var sky_strips := 28
 	var strip_height := sky_height / sky_strips
 	for strip in range(sky_strips):
 		var blend := float(strip) / float(sky_strips - 1)
 		var strip_color := sky_top_color.lerp(sky_bottom_color, blend)
 		draw_rect(
-			Rect2(0, sky_start_y + strip * strip_height, map_width, strip_height + 1.0),
+			Rect2(visible_bounds.position.x - 32.0, sky_start_y + strip * strip_height, visible_bounds.size.x + 64.0, strip_height + 1.0),
 			strip_color
 		)
 
+	# A soft red world rim makes the ceiling and side walls easy to recognize.
+	var map_border := Rect2(0.0, 0.0, map_width, floor_y)
+	draw_rect(map_border, Color(1.0, 0.12, 0.18, 0.22), false, 28.0, true)
+	draw_rect(map_border, Color(1.0, 0.4, 0.38, 0.9), false, 7.0, true)
+
 	# Draw collectible coins over the sky, beneath the game objects.
 	for coin_position in coin_positions:
-		draw_circle(coin_position, 15.0, Color("e5a900"))
-		draw_circle(coin_position, 11.0, Color("ffdf3c"))
-		draw_arc(coin_position, 8.0, 0.0, TAU, 20, Color("fff4a3"), 2.0, true)
+		if expanded_bounds.has_point(coin_position):
+			draw_circle(coin_position, 15.0, Color("e5a900"))
+			draw_circle(coin_position, 11.0, Color("ffdf3c"))
+			draw_arc(coin_position, 8.0, 0.0, TAU, 20, Color("fff4a3"), 2.0, true)
 	for big_coin_position in big_coin_positions:
-		draw_circle(big_coin_position, 30.0, Color("bd6900"))
-		draw_circle(big_coin_position, 25.0, Color("ffb000"))
-		draw_circle(big_coin_position, 19.0, Color("ffe261"))
-		draw_arc(big_coin_position, 15.0, 0.0, TAU, 20, Color("fff7bc"), 3.0, true)
+		if expanded_bounds.has_point(big_coin_position):
+			draw_circle(big_coin_position, 30.0, Color("bd6900"))
+			draw_circle(big_coin_position, 25.0, Color("ffb000"))
+			draw_circle(big_coin_position, 19.0, Color("ffe261"))
+			draw_arc(big_coin_position, 15.0, 0.0, TAU, 20, Color("fff7bc"), 3.0, true)
 
 	# Bright rolling embers make the lethal floor immediately readable as lava.
-	for ember_x in range(0, int(map_width), 56):
-		var ember_y := floor_y - 7.0 + sin(world_elapsed * 3.0 + float(ember_x) * 0.08) * 8.0
-		draw_circle(Vector2(float(ember_x), ember_y), 11.0, Color("ffb11f"))
-
-	# Draw the tether only while Jelly is swinging.
-	if not is_instance_valid(block):
-		return
-
-	var origin = block.position + block.size / 2.0
-	if is_swinging and is_instance_valid(swing_anchor):
-		draw_line(swing_anchor.global_position, origin, Color.BLACK, 6.0, true)
+	if visible_bounds.end.y >= floor_y - 70.0:
+		var ember_start: int = max(0, int(visible_bounds.position.x / 56.0) * 56)
+		var ember_end: int = min(int(map_width), int(visible_bounds.end.x / 56.0 + 1.0) * 56)
+		for ember_x in range(ember_start, ember_end, 56):
+			var ember_y := floor_y - 7.0 + sin(world_elapsed * 3.0 + float(ember_x) * 0.08) * 8.0
+			draw_circle(Vector2(float(ember_x), ember_y), 11.0, Color("ffb11f"))
 
 	# Friendly bots use thinner lavender tethers so they read as background activity.
 	for bot_node in bot_swings.get_children():
 		var bot := bot_node as Node2D
-		if bot and not bool(bot.get_meta("rope_cut")):
+		if bot and not bool(bot.get_meta("rope_cut")) and expanded_bounds.has_point(bot.global_position):
 			var bot_anchor_position: Vector2 = bot.get_meta("from_anchor")
 			draw_line(bot_anchor_position, bot.global_position, Color(0.24, 0.12, 0.39, 0.72), 3.0, true)
 

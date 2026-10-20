@@ -385,9 +385,9 @@ horizontal_alignment = 1
 
 [node name="ChestTabButton" type="Button" parent="HUD/ShopScreen"]
 layout_mode = 0
-offset_left = 105.0
+offset_left = 45.0
 offset_top = 195.0
-offset_right = 345.0
+offset_right = 260.0
 offset_bottom = 275.0
 theme_override_font_sizes/font_size = 23
 theme_override_colors/font_color = Color(1, 0.88, 0.33, 1)
@@ -396,15 +396,26 @@ text = "CHESTS"
 
 [node name="JellyTabButton" type="Button" parent="HUD/ShopScreen"]
 layout_mode = 0
-offset_left = 375.0
+offset_left = 270.0
 offset_top = 195.0
-offset_right = 615.0
+offset_right = 450.0
 offset_bottom = 275.0
 theme_override_font_sizes/font_size = 23
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_styles/normal = SubResource("StyleSecondaryNormal")
 theme_override_styles/hover = SubResource("StyleSecondaryHover")
 text = "JELLIES"
+
+[node name="CoinsTabButton" type="Button" parent="HUD/ShopScreen"]
+layout_mode = 0
+offset_left = 460.0
+offset_top = 195.0
+offset_right = 675.0
+offset_bottom = 275.0
+theme_override_colors/font_color = Color(0.12, 0.08, 0.2, 1)
+theme_override_font_sizes/font_size = 20
+theme_override_styles/normal = SubResource("StyleGoldNormal")
+text = "FREE COINS"
 
 [node name="ChestCard" type="ColorRect" parent="HUD/ShopScreen"]
 layout_mode = 0
@@ -436,12 +447,17 @@ theme_override_font_sizes/font_size = 18
 text = "Guaranteed new Jelly skin"
 horizontal_alignment = 1
 
-[node name="SkinList" type="GridContainer" parent="HUD/ShopScreen"]
+[node name="SkinScroll" type="ScrollContainer" parent="HUD/ShopScreen"]
 layout_mode = 0
-offset_left = 160.0
+offset_left = 135.0
 offset_top = 285.0
-offset_right = 560.0
-offset_bottom = 920.0
+offset_right = 585.0
+offset_bottom = 1050.0
+horizontal_scroll_mode = 0
+
+[node name="SkinList" type="GridContainer" parent="HUD/ShopScreen/SkinScroll"]
+layout_mode = 2
+custom_minimum_size = Vector2(400, 0)
 theme_override_constants/h_separation = 18
 theme_override_constants/v_separation = 12
 columns = 2
@@ -552,66 +568,87 @@ offset_right = 560.0
 offset_bottom = 28.0
 theme_override_colors/font_color = Color(0.72, 0.85, 1, 1)
 theme_override_font_sizes/font_size = 17
-text = "FOOD JELLIES: TAP UNCOMMON • MORE TIERS SOON"
+text = "CHOOSE A CHEST"
 horizontal_alignment = 1
+
+[node name="Common" type="TextureButton" parent="HUD/ShopScreen/FutureChestRow"]
+layout_mode = 0
+offset_left = 8.0
+offset_top = 35.0
+offset_right = 108.0
+offset_bottom = 135.0
+texture_normal = ExtResource("5_chest")
+ignore_texture_size = true
+stretch_mode = 5
 
 [node name="Uncommon" type="TextureButton" parent="HUD/ShopScreen/FutureChestRow"]
 layout_mode = 0
-offset_left = 10.0
+offset_left = 118.0
 offset_top = 35.0
-offset_right = 135.0
-offset_bottom = 160.0
+offset_right = 218.0
+offset_bottom = 135.0
 texture_normal = ExtResource("6_uncommon")
 ignore_texture_size = true
 stretch_mode = 5
 
-[node name="Rare" type="TextureRect" parent="HUD/ShopScreen/FutureChestRow"]
+[node name="Rare" type="TextureButton" parent="HUD/ShopScreen/FutureChestRow"]
 layout_mode = 0
-offset_left = 150.0
+offset_left = 228.0
 offset_top = 35.0
-offset_right = 275.0
-offset_bottom = 160.0
-texture = ExtResource("7_rare")
-expand_mode = 1
+offset_right = 328.0
+offset_bottom = 135.0
+texture_normal = ExtResource("7_rare")
+ignore_texture_size = true
 stretch_mode = 5
 
-[node name="Epic" type="TextureRect" parent="HUD/ShopScreen/FutureChestRow"]
+[node name="Epic" type="TextureButton" parent="HUD/ShopScreen/FutureChestRow"]
 layout_mode = 0
-offset_left = 285.0
+offset_left = 338.0
 offset_top = 35.0
-offset_right = 410.0
-offset_bottom = 160.0
-texture = ExtResource("8_epic")
-expand_mode = 1
+offset_right = 438.0
+offset_bottom = 135.0
+texture_normal = ExtResource("8_epic")
+ignore_texture_size = true
 stretch_mode = 5
 
-[node name="Legendary" type="TextureRect" parent="HUD/ShopScreen/FutureChestRow"]
+[node name="Legendary" type="TextureButton" parent="HUD/ShopScreen/FutureChestRow"]
 layout_mode = 0
-offset_left = 425.0
+offset_left = 448.0
 offset_top = 35.0
-offset_right = 550.0
-offset_bottom = 160.0
-texture = ExtResource("9_legendary")
-expand_mode = 1
+offset_right = 548.0
+offset_bottom = 135.0
+texture_normal = ExtResource("9_legendary")
+ignore_texture_size = true
 stretch_mode = 5
+
+[node name="CommonLabel" type="Label" parent="HUD/ShopScreen/FutureChestRow"]
+layout_mode = 0
+offset_left = 0.0
+offset_top = 140.0
+offset_right = 116.0
+offset_bottom = 170.0
+theme_override_colors/font_color = Color(1, 0.88, 0.33, 1)
+theme_override_font_sizes/font_size = 13
+text = "COMMON • 50"
+horizontal_alignment = 1
 
 [node name="UncommonLabel" type="Label" parent="HUD/ShopScreen/FutureChestRow"]
 layout_mode = 0
-offset_left = 0.0
-offset_top = 165.0
-offset_right = 145.0
-offset_bottom = 195.0
+offset_left = 110.0
+offset_top = 140.0
+offset_right = 226.0
+offset_bottom = 170.0
 theme_override_colors/font_color = Color(0.45, 1, 0.65, 1)
 theme_override_font_sizes/font_size = 14
-text = "UNCOMMON — 100"
+text = "UNCOMMON • 100"
 horizontal_alignment = 1
 
 [node name="RareLabel" type="Label" parent="HUD/ShopScreen/FutureChestRow"]
 layout_mode = 0
-offset_left = 140.0
-offset_top = 165.0
-offset_right = 285.0
-offset_bottom = 195.0
+offset_left = 220.0
+offset_top = 140.0
+offset_right = 336.0
+offset_bottom = 170.0
 theme_override_colors/font_color = Color(0.4, 0.82, 1, 1)
 theme_override_font_sizes/font_size = 14
 text = "RARE"
@@ -619,24 +656,76 @@ horizontal_alignment = 1
 
 [node name="EpicLabel" type="Label" parent="HUD/ShopScreen/FutureChestRow"]
 layout_mode = 0
-offset_left = 275.0
-offset_top = 165.0
-offset_right = 420.0
-offset_bottom = 195.0
+offset_left = 330.0
+offset_top = 140.0
+offset_right = 446.0
+offset_bottom = 170.0
 theme_override_colors/font_color = Color(0.89, 0.49, 1, 1)
 theme_override_font_sizes/font_size = 14
-text = "EPIC"
+text = "EPIC • 250"
 horizontal_alignment = 1
 
 [node name="LegendaryLabel" type="Label" parent="HUD/ShopScreen/FutureChestRow"]
 layout_mode = 0
-offset_left = 415.0
-offset_top = 165.0
+offset_left = 440.0
+offset_top = 140.0
 offset_right = 560.0
-offset_bottom = 195.0
+offset_bottom = 170.0
 theme_override_colors/font_color = Color(1, 0.78, 0.24, 1)
 theme_override_font_sizes/font_size = 14
 text = "LEGENDARY"
+horizontal_alignment = 1
+
+[node name="AdPanel" type="ColorRect" parent="HUD/ShopScreen"]
+layout_mode = 0
+offset_left = 85.0
+offset_top = 330.0
+offset_right = 635.0
+offset_bottom = 800.0
+color = Color(0.22, 0.35, 0.76, 0.96)
+
+[node name="Title" type="Label" parent="HUD/ShopScreen/AdPanel"]
+layout_mode = 0
+offset_left = 30.0
+offset_top = 55.0
+offset_right = 520.0
+offset_bottom = 115.0
+theme_override_colors/font_color = Color(1, 0.9, 0.32, 1)
+theme_override_font_sizes/font_size = 34
+text = "FREE COINS"
+horizontal_alignment = 1
+
+[node name="Description" type="Label" parent="HUD/ShopScreen/AdPanel"]
+layout_mode = 0
+offset_left = 50.0
+offset_top = 145.0
+offset_right = 500.0
+offset_bottom = 230.0
+theme_override_colors/font_color = Color(0.94, 0.97, 1, 1)
+theme_override_font_sizes/font_size = 22
+text = "Testing reward only\nNo ad is connected yet."
+horizontal_alignment = 1
+
+[node name="AdRewardButton" type="Button" parent="HUD/ShopScreen/AdPanel"]
+layout_mode = 0
+offset_left = 75.0
+offset_top = 275.0
+offset_right = 475.0
+offset_bottom = 355.0
+theme_override_colors/font_color = Color(0.12, 0.08, 0.2, 1)
+theme_override_font_sizes/font_size = 26
+theme_override_styles/normal = SubResource("StyleGoldNormal")
+text = "WATCH AD  +10 COINS"
+
+[node name="AdStatus" type="Label" parent="HUD/ShopScreen/AdPanel"]
+layout_mode = 0
+offset_left = 40.0
+offset_top = 380.0
+offset_right = 510.0
+offset_bottom = 420.0
+theme_override_colors/font_color = Color(0.75, 1, 0.88, 1)
+theme_override_font_sizes/font_size = 18
+text = "TEST MODE READY"
 horizontal_alignment = 1
 
 [node name="BackButton" type="Button" parent="HUD/ShopScreen"]
@@ -664,6 +753,12 @@ scale = Vector2(0.08, 0.08)
 texture = ExtResource("2_e2o6t")
 
 [node name="BladeOrbit" type="Node2D" parent="."]
+
+[node name="SwingRope" type="Line2D" parent="."]
+width = 6.0
+default_color = Color(0.03, 0.02, 0.06, 1)
+antialiased = true
+z_index = 1
 
 [node name="BotSwings" type="Node2D" parent="."]
 
