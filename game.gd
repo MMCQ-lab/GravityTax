@@ -11,6 +11,7 @@ const JELLY_TEXTURE := preload("res://images/cute cube face.png")
 const SKIN_CATALOG_TEXTURE := preload("res://images/jelly_skin_catalog.png")
 const COMMON_CHEST_TEXTURE := preload("res://images/common_chest.png")
 const UNCOMMON_CHEST_TEXTURE := preload("res://images/uncommon_chest.png")
+const RARE_ANIMAL_SKIN_TEXTURE := preload("res://images/rare_animal_jellies.png")
 const FOOD_SKIN_TEXTURES := [
 	preload("res://images/food_sushi_jelly.png"),
 	preload("res://images/food_donut_jelly.png"),
@@ -100,6 +101,11 @@ var coin_count := 180
 var coin_positions: Array[Vector2] = []
 var big_coin_count := 34
 var big_coin_positions: Array[Vector2] = []
+var bounce_pad_count := 58
+var bounce_pad_positions: Array[Vector2] = []
+var bounce_pad_size := Vector2(130.0, 17.0)
+var bounce_pad_launch_speed := 980.0
+var bounce_pad_next_trigger_time := 0.0
 var coins_collected := 0
 var high_score := 0
 var wallet_coins := 0
@@ -116,11 +122,11 @@ var skin_definitions: Array[Dictionary] = [
 	{"name": "Mint Chip", "price": 220, "body": "42d8b3", "face": "e8fff8"},
 	{"name": "Lava Glow", "price": 300, "body": "ff5d22", "face": "fff0cc"},
 	{"name": "Galaxy", "price": 450, "body": "6328a8", "face": "ffd5ff"},
-	{"name": "Sushi Jelly", "tier": "Uncommon"},
-	{"name": "Donut Jelly", "tier": "Uncommon"},
-	{"name": "Strawberry Jelly", "tier": "Uncommon"},
-	{"name": "Cupcake Jelly", "tier": "Uncommon"},
-	{"name": "Watermelon Jelly", "tier": "Uncommon"},
+	{"name": "Sushi Jelly", "tier": "Rare"},
+	{"name": "Donut Jelly", "tier": "Rare"},
+	{"name": "Strawberry Jelly", "tier": "Rare"},
+	{"name": "Cupcake Jelly", "tier": "Rare"},
+	{"name": "Watermelon Jelly", "tier": "Rare"},
 	{"name": "Straw Hat Jelly", "tier": "Epic"},
 	{"name": "Cyber Ninja Jelly", "tier": "Epic"},
 	{"name": "Space Ranger Jelly", "tier": "Epic"},
@@ -130,7 +136,17 @@ var skin_definitions: Array[Dictionary] = [
 	{"name": "Dragon Warrior Jelly", "tier": "Epic"},
 	{"name": "Arcade Alien Jelly", "tier": "Epic"},
 	{"name": "Mech Pilot Jelly", "tier": "Epic"},
-	{"name": "Moon Vigilante Jelly", "tier": "Epic"}
+	{"name": "Moon Vigilante Jelly", "tier": "Epic"},
+	{"name": "Fox Jelly", "tier": "Uncommon"},
+	{"name": "Panda Jelly", "tier": "Uncommon"},
+	{"name": "Cat Jelly", "tier": "Uncommon"},
+	{"name": "Bunny Jelly", "tier": "Uncommon"},
+	{"name": "Tiger Jelly", "tier": "Uncommon"},
+	{"name": "Penguin Jelly", "tier": "Uncommon"},
+	{"name": "Frog Jelly", "tier": "Uncommon"},
+	{"name": "Axolotl Jelly", "tier": "Uncommon"},
+	{"name": "Koala Jelly", "tier": "Uncommon"},
+	{"name": "Lion Jelly", "tier": "Uncommon"}
 ]
 var bot_names: Array[String] = ["Bloop", "Mochi", "Pip", "Zing", "Wobble", "Nori", "Fizz", "Taffy", "Pebble", "Comet", "Pogo", "Doodle"]
 var common_chest_cost := 50
@@ -138,8 +154,8 @@ var uncommon_chest_cost := 100
 var selected_chest_tier := "COMMON"
 var chest_definitions: Dictionary = {
 	"COMMON": {"cost": 50, "rewards": [1, 2, 3, 4, 5, 6, 7, 8, 9], "texture": COMMON_CHEST_TEXTURE, "description": "Guaranteed new classic Jelly skin", "available": true},
-	"UNCOMMON": {"cost": 100, "rewards": [10, 11, 12, 13, 14], "texture": UNCOMMON_CHEST_TEXTURE, "description": "Guaranteed new food Jelly skin", "available": true},
-	"RARE": {"cost": 0, "rewards": [], "texture": preload("res://images/rare_chest.png"), "description": "Rewards coming soon", "available": false},
+	"UNCOMMON": {"cost": 100, "rewards": [25, 26, 27, 28, 29, 30, 31, 32, 33, 34], "texture": UNCOMMON_CHEST_TEXTURE, "description": "Guaranteed cute animal Jelly", "available": true},
+	"RARE": {"cost": 175, "rewards": [10, 11, 12, 13, 14], "texture": preload("res://images/rare_chest.png"), "description": "Guaranteed new food Jelly skin", "available": true},
 	"EPIC": {"cost": 250, "rewards": [15, 16, 17, 18, 19, 20, 21, 22, 23, 24], "texture": preload("res://images/epic_chest.png"), "description": "Guaranteed pop-culture-inspired Jelly", "available": true},
 	"LEGENDARY": {"cost": 0, "rewards": [], "texture": preload("res://images/legendary_chest.png"), "description": "Rewards coming soon", "available": false}
 }
@@ -174,6 +190,8 @@ var knife_angle := 0.0
 var bat_kills := 0
 var orbiting_knives: Array[Sprite2D] = []
 var previous_player_center := Vector2.ZERO
+var jelly_base_scale := Vector2.ONE
+var jelly_collision_next_time := 0.0
 
 # Movement settings
 var gravity: float = 500.0
@@ -215,6 +233,7 @@ func _ready() -> void:
 
 	# Rotate and squash around the block's center
 	block.pivot_offset = block.size / 2.0
+	jelly_sprite.position = block.size * 0.5
 
 	# Begin with the block upright
 	block.rotation = 0.0
@@ -312,7 +331,7 @@ func _physics_process(delta: float) -> void:
 	block.position += velocity * delta
 	if is_swinging and is_instance_valid(swing_anchor):
 		# Keep Jelly moving along a circular arc around the selected orb.
-		var jelly_center := block.position + block.size / 2.0
+		var jelly_center := get_player_center()
 		var rope_direction := (jelly_center - swing_anchor.global_position).normalized()
 		block.position = swing_anchor.global_position + rope_direction * swing_rope_length - block.size / 2.0
 		var tangential_velocity: Vector2 = velocity - rope_direction * velocity.dot(rope_direction)
@@ -322,6 +341,8 @@ func _physics_process(delta: float) -> void:
 
 	var floor_top = floor_rect.position.y
 	var block_bottom = block.position.y + block.size.y
+	if check_bounce_pads(block_bottom):
+		block_bottom = block.position.y + block.size.y
 	# The floor is lava: one touch ends the run instead of bouncing Jelly safely.
 	if block_bottom >= floor_top and velocity.y >= 0.0:
 		end_game()
@@ -340,10 +361,11 @@ func _physics_process(delta: float) -> void:
 		block.position.x = map_width - block.size.x
 		velocity.x = -abs(velocity.x) * wall_bounce
 
+	resolve_jelly_collisions()
 	collect_power_ups()
 
 	# Keep Jelly centered on screen as it travels through the tall level.
-	camera.global_position = block.global_position + block.size / 2.0
+	camera.global_position = get_player_center()
 	collect_coins(delta)
 	update_bats(delta)
 	update_swing_rope()
@@ -365,6 +387,7 @@ func populate_world() -> void:
 		bot.queue_free()
 	coin_positions.clear()
 	big_coin_positions.clear()
+	bounce_pad_positions.clear()
 
 	# Ensure the opening screen always has one reachable anchor.
 	spawn_anchor(Vector2(randf_range(350.0, 580.0), randf_range(400.0, 650.0)))
@@ -387,6 +410,14 @@ func populate_world() -> void:
 		big_coin_positions.append(Vector2(
 			randf_range(70.0, map_width - 70.0),
 			randf_range(220.0, floor_y - 180.0)
+		))
+	# Spring pads offer random recovery routes throughout the large map.
+	# A guaranteed first pad sits directly below the starting Jelly.
+	bounce_pad_positions.append(Vector2(390.0, 640.0))
+	for pad_index in range(bounce_pad_count - 1):
+		bounce_pad_positions.append(Vector2(
+			randf_range(90.0, map_width - 90.0),
+			randf_range(540.0, floor_y - 190.0)
 		))
 
 	for bat_index in range(bat_count):
@@ -414,6 +445,25 @@ func populate_world() -> void:
 			randf_range(120.0, map_width - 120.0),
 			randf_range(300.0, floor_y - 220.0)
 		))
+
+
+func check_bounce_pads(block_bottom: float) -> bool:
+	if world_elapsed < bounce_pad_next_trigger_time:
+		return false
+	for pad_position in bounce_pad_positions:
+		var pad_rect := Rect2(pad_position - bounce_pad_size * 0.5, bounce_pad_size)
+		var player_rect := Rect2(block.position, block.size)
+		# Pads are intentionally forgiving: touching one from any direction launches
+		# Jelly back above it, so passing underneath cannot make a pad feel broken.
+		if player_rect.grow(10.0).intersects(pad_rect):
+			var pad_top := pad_rect.position.y
+			block.position.y = pad_top - block.size.y
+			velocity.y = -maxf(absf(velocity.y) * 1.18, bounce_pad_launch_speed)
+			bounce_pad_next_trigger_time = world_elapsed + 0.22
+			land()
+			show_power_message("BOING!")
+			return true
+	return false
 
 
 func spawn_anchor(anchor_position: Vector2) -> void:
@@ -691,6 +741,35 @@ func update_swing_bots(delta: float) -> void:
 		update_leaderboard()
 
 
+func resolve_jelly_collisions() -> void:
+	# Jelly and the racer Jellies bump apart rather than overlapping.
+	var player_center := get_player_center()
+	# Use compact contact circles so racers only bump when their Jelly bodies touch.
+	var player_radius := 42.0
+	var bot_radius := 34.0
+	for bot_node in bot_swings.get_children():
+		var bot := bot_node as Node2D
+		if not bot:
+			continue
+		var offset := player_center - bot.global_position
+		var minimum_distance := player_radius + bot_radius
+		if offset.length_squared() >= minimum_distance * minimum_distance:
+			continue
+		var normal := offset.normalized() if offset.length_squared() > 0.001 else Vector2.UP
+		var overlap := minimum_distance - offset.length()
+		block.position += normal * overlap * 0.7
+		bot.global_position -= normal * overlap * 0.3
+		if velocity.dot(normal) < 0.0:
+			velocity = velocity.bounce(normal) * 0.72
+		var bot_velocity: Vector2 = bot.get_meta("velocity")
+		if bot_velocity.dot(normal) > 0.0:
+			bot_velocity = bot_velocity.bounce(-normal) * 0.72
+		bot.set_meta("velocity", bot_velocity)
+		if world_elapsed >= jelly_collision_next_time:
+			jelly_collision_next_time = world_elapsed + 0.35
+			show_power_message("JELLY BUMP!")
+
+
 func player_hits_bot_rope(anchor_position: Vector2, rope_end: Vector2) -> bool:
 	# Check both ends of Jelly's physics-step path so fast swings can still cut a rope.
 	var cut_radius := 28.0
@@ -898,6 +977,8 @@ func restart_game() -> void:
 	was_on_floor = false
 	jump_cooldown_remaining = 0.0
 	world_elapsed = 0.0
+	bounce_pad_next_trigger_time = 0.0
+	jelly_collision_next_time = 0.0
 	power_message_time = 0.0
 	if flip_tween and flip_tween.is_running():
 		flip_tween.kill()
@@ -935,7 +1016,8 @@ func return_to_main_menu() -> void:
 
 
 func get_player_center() -> Vector2:
-	return block.global_position + block.size / 2.0
+	# The rope endpoint, camera target, and collision center share Jelly's pivot.
+	return jelly_sprite.global_position
 
 
 func has_player_contact(world_position: Vector2, radius: float) -> bool:
@@ -1055,19 +1137,28 @@ func apply_selected_skin() -> void:
 	# Each skin is a real generated texture tile, not a color tint of the base Jelly.
 	var selected_skin_texture := create_skin_texture(selected_skin)
 	jelly_sprite.texture = selected_skin_texture
-	jelly_sprite.scale = get_skin_sprite_scale(selected_skin, selected_skin_texture)
+	jelly_base_scale = get_skin_sprite_scale(selected_skin, selected_skin_texture)
+	jelly_sprite.scale = jelly_base_scale
+	# The Sprite's origin is always the exact center of the gameplay hitbox.
+	jelly_sprite.position = block.size * 0.5
 	jelly_sprite.modulate = Color.WHITE
 	block.color = Color.TRANSPARENT
+	block.scale = Vector2.ONE
 
 
 func get_skin_sprite_scale(skin_id: int, skin_texture: Texture2D) -> Vector2:
-	# Keep each texture's aspect ratio intact. Original atlas skins retain their
-	# pre-change scale; food skins are reduced proportionally to the same width.
-	var source_edge := 512.0 if skin_id < 10 else maxf(float(skin_texture.get_width()), float(skin_texture.get_height()))
-	return Vector2.ONE * (102.4 / source_edge)
+	# Keep the artwork about 96px, with a 105px hitbox giving it a small buffer.
+	var source_edge := maxf(float(skin_texture.get_width()), float(skin_texture.get_height()))
+	return Vector2.ONE * (96.0 / source_edge)
 
 
 func create_skin_texture(skin_id: int) -> Texture2D:
+	if skin_id >= 25:
+		var animal_atlas := AtlasTexture.new()
+		animal_atlas.atlas = RARE_ANIMAL_SKIN_TEXTURE
+		var animal_index := skin_id - 25
+		animal_atlas.region = Rect2(float(animal_index % 2) * 512.0, float(animal_index / 2) * 307.2, 512.0, 307.2)
+		return animal_atlas
 	if skin_id >= 15:
 		return EPIC_SKIN_TEXTURES[skin_id - 15]
 	if skin_id >= 10:
@@ -1463,44 +1554,44 @@ func launch() -> void:
 	if straighten_tween and straighten_tween.is_running():
 		straighten_tween.kill()
 
+	# A tap-jump starts from the same clean state as a bounce-pad launch.
+	block.rotation = 0.0
+	block.scale = Vector2.ONE
+	jelly_sprite.position = block.size * 0.5
+	jelly_sprite.scale = jelly_base_scale
+
 	# Random clockwise or counterclockwise spin
 	var direction: int = [-1, 1].pick_random()
-	var spin_amount: float = randf_range(0.8, 1.3) * TAU
+	# A whole number of turns lands naturally upright instead of snapping back.
+	var spin_amount: float = float([1, 2].pick_random()) * TAU
 
 	flip_tween = create_tween()
 	flip_tween.tween_property(
 		block,
 		"rotation",
 		block.rotation + spin_amount * direction,
-		0.55
-	).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+		0.50
+	).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	flip_tween.tween_callback(_finish_jump_visual_reset)
 
-	# Extreme jelly animation
+	# Deform only the artwork, so Jelly feels elastic while the hitbox stays stable.
 	jelly_tween = create_tween()
+	jelly_tween.tween_property(jelly_sprite, "scale", jelly_base_scale * Vector2(0.82, 1.18), 0.12).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	jelly_tween.tween_property(jelly_sprite, "scale", jelly_base_scale * Vector2(1.14, 0.88), 0.16).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	jelly_tween.tween_property(jelly_sprite, "scale", jelly_base_scale, 0.22).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
 
-	# Stretch upward
-	jelly_tween.tween_property(
-		block,
-		"scale",
-		Vector2(0.55, 1.65),
-		0.12
-	)
+	# Keep the displayed Jelly exactly aligned with the fixed gameplay hitbox.
+	# Scaling the parent made the visual larger than collisions during a jump.
+	block.scale = Vector2.ONE
+	jelly_sprite.position = block.size * 0.5
 
-	# Squash sideways
-	jelly_tween.tween_property(
-		block,
-		"scale",
-		Vector2(1.45, 0.65),
-		0.15
-	)
 
-	# Elastic recovery
-	jelly_tween.tween_property(
-		block,
-		"scale",
-		Vector2.ONE,
-		0.45
-	).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
+func _finish_jump_visual_reset() -> void:
+	# Restore the clean hitbox-aligned look exactly 0.5 seconds after launching.
+	block.rotation = 0.0
+	block.scale = Vector2.ONE
+	jelly_sprite.position = block.size * 0.5
+	jelly_sprite.scale = jelly_base_scale
 
 
 func _draw() -> void:
@@ -1542,6 +1633,16 @@ func _draw() -> void:
 			draw_circle(big_coin_position, 19.0, Color("ffe261"))
 			draw_arc(big_coin_position, 15.0, 0.0, TAU, 20, Color("fff7bc"), 3.0, true)
 
+	# Neon spring pads are drawn in-world rather than as dozens of extra nodes.
+	for pad_position in bounce_pad_positions:
+		if expanded_bounds.has_point(pad_position):
+			var pad_rect := Rect2(pad_position - bounce_pad_size * 0.5, bounce_pad_size)
+			var pad_pulse := 0.88 + sin(world_elapsed * 5.0 + pad_position.x * 0.01) * 0.12
+			draw_rect(pad_rect.grow(4.0), Color(0.25, 1.0, 0.9, 0.20 * pad_pulse), true)
+			draw_rect(pad_rect, Color("20d9c7"), true)
+			draw_rect(pad_rect, Color("e9fff8"), false, 3.0, true)
+			draw_line(pad_rect.position + Vector2(12.0, 6.0), pad_rect.end - Vector2(12.0, 6.0), Color("08796f"), 3.0, true)
+
 	# Bright rolling embers make the lethal floor immediately readable as lava.
 	if visible_bounds.end.y >= floor_y - 70.0:
 		var ember_start: int = max(0, int(visible_bounds.position.x / 56.0) * 56)
@@ -1578,20 +1679,7 @@ func land() -> void:
 		0.15
 	).set_trans(Tween.TRANS_SINE)
 
-	# Squash on landing
-	jelly_tween = create_tween()
-
-	jelly_tween.tween_property(
-		block,
-		"scale",
-		Vector2(1.65, 0.50),
-		0.10
-	)
-
-	# Spring back to normal shape
-	jelly_tween.tween_property(
-		block,
-		"scale",
-		Vector2.ONE,
-		0.50
-	).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
+	# Do not squash the parent: collision uses the unscaled 48x48 hitbox.
+	block.scale = Vector2.ONE
+	jelly_sprite.position = block.size * 0.5
+	jelly_sprite.scale = jelly_base_scale

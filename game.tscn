@@ -743,12 +743,12 @@ text = "← HOME"
 [node name="Block" type="ColorRect" parent="." unique_id=1780596874]
 offset_left = 300.0
 offset_top = 100.0
-offset_right = 348.0
-offset_bottom = 148.0
+offset_right = 405.0
+offset_bottom = 205.0
 color = Color(0.20077321, 0.99333614, 0.99999994, 1)
 
 [node name="jelly" type="Sprite2D" parent="Block" unique_id=1475031560]
-position = Vector2(24, 23)
+position = Vector2(52.5, 52.5)
 scale = Vector2(0.08, 0.08)
 texture = ExtResource("2_e2o6t")
 
