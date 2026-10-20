@@ -12,6 +12,12 @@ const SKIN_CATALOG_TEXTURE := preload("res://images/jelly_skin_catalog.png")
 const COMMON_CHEST_TEXTURE := preload("res://images/common_chest.png")
 const UNCOMMON_CHEST_TEXTURE := preload("res://images/uncommon_chest.png")
 const RARE_ANIMAL_SKIN_TEXTURE := preload("res://images/rare_animal_jellies.png")
+const BACKGROUND_MUSIC := preload("res://sounds/backround1.mp3")
+const JUMP_SOUND := preload("res://sounds/bestuploadsever67aryan-jump-sound-531048.mp3")
+const BOUNCE_SOUND := preload("res://sounds/freesound_community-jump-climb-or-damage-sound-f-95942.mp3")
+const SWOOSH_SOUND := preload("res://sounds/alexzavesa-swoosh-1-463607.mp3")
+const ACTION_SOUND := preload("res://sounds/freesound_gamestudio-rpg-sword-attack-combo-28-388957.mp3")
+const GAME_OVER_SOUND := preload("res://sounds/universfield-game-over-deep-male-voice-clip-352695.mp3")
 const FOOD_SKIN_TEXTURES := [
 	preload("res://images/food_sushi_jelly.png"),
 	preload("res://images/food_donut_jelly.png"),
@@ -192,6 +198,12 @@ var orbiting_knives: Array[Sprite2D] = []
 var previous_player_center := Vector2.ZERO
 var jelly_base_scale := Vector2.ONE
 var jelly_collision_next_time := 0.0
+var background_music_player: AudioStreamPlayer
+var jump_sound_player: AudioStreamPlayer
+var bounce_sound_player: AudioStreamPlayer
+var swoosh_sound_player: AudioStreamPlayer
+var action_sound_player: AudioStreamPlayer
+var game_over_sound_player: AudioStreamPlayer
 
 # Movement settings
 var gravity: float = 500.0
@@ -238,6 +250,7 @@ func _ready() -> void:
 	# Begin with the block upright
 	block.rotation = 0.0
 	block.scale = Vector2.ONE
+	setup_audio()
 	populate_world()
 	update_coin_counter()
 	load_high_score()
@@ -274,6 +287,30 @@ func _ready() -> void:
 	skin_scroll.scroll_deadzone = 8
 	build_skin_shop()
 	select_chest("COMMON")
+
+
+func setup_audio() -> void:
+	background_music_player = make_audio_player(BACKGROUND_MUSIC, -20.0)
+	jump_sound_player = make_audio_player(JUMP_SOUND, -8.0)
+	bounce_sound_player = make_audio_player(BOUNCE_SOUND, -6.0)
+	swoosh_sound_player = make_audio_player(SWOOSH_SOUND, -10.0)
+	action_sound_player = make_audio_player(ACTION_SOUND, -10.0)
+	game_over_sound_player = make_audio_player(GAME_OVER_SOUND, -4.0)
+
+
+func make_audio_player(stream: AudioStream, volume_db: float) -> AudioStreamPlayer:
+	var player := AudioStreamPlayer.new()
+	player.stream = stream
+	player.volume_db = volume_db
+	add_child(player)
+	return player
+
+
+func play_sfx(player: AudioStreamPlayer) -> void:
+	if not player:
+		return
+	player.stop()
+	player.play()
 
 
 func _process(delta: float) -> void:
@@ -461,6 +498,7 @@ func check_bounce_pads(block_bottom: float) -> bool:
 			velocity.y = -maxf(absf(velocity.y) * 1.18, bounce_pad_launch_speed)
 			bounce_pad_next_trigger_time = world_elapsed + 0.22
 			land()
+			play_sfx(bounce_sound_player)
 			show_power_message("BOING!")
 			return true
 	return false
@@ -913,6 +951,7 @@ func defeat_bat(bat: Sprite2D) -> void:
 	bats.remove_child(bat)
 	bat.queue_free()
 	bat_kills += 1
+	play_sfx(action_sound_player)
 	update_kill_counter()
 
 
@@ -936,6 +975,7 @@ func end_game() -> void:
 		jelly_tween.kill()
 	if straighten_tween and straighten_tween.is_running():
 		straighten_tween.kill()
+	play_sfx(game_over_sound_player)
 	if coins_collected > high_score:
 		high_score = coins_collected
 		save_high_score()
@@ -949,6 +989,8 @@ func start_game() -> void:
 	if game_started:
 		return
 	game_started = true
+	if not background_music_player.playing:
+		background_music_player.play()
 	start_screen.hide()
 	coin_counter.show()
 	high_score_label.show()
@@ -1000,6 +1042,7 @@ func return_to_main_menu() -> void:
 	game_started = false
 	game_over = false
 	velocity = Vector2.ZERO
+	background_music_player.stop()
 	is_swinging = false
 	swing_anchor = null
 	swing_rope.hide()
@@ -1300,6 +1343,7 @@ func open_chest(tier_name: String, cost: int, reward_pool: Array[int], chest_tex
 		chest_result_label.text = "NEED %d MORE COINS" % (cost - wallet_coins)
 		return
 	wallet_coins -= cost
+	play_sfx(swoosh_sound_player)
 	chest_target_skin = locked_skins.pick_random()
 	chest_reward_pool = reward_pool
 	chest_roll_elapsed = 0.0
@@ -1507,6 +1551,7 @@ func begin_swing() -> void:
 		return
 
 	is_swinging = true
+	play_sfx(swoosh_sound_player)
 	swing_anchor = selected_anchor
 	var jelly_center := block.position + block.size / 2.0
 	swing_rope_length = max(jelly_center.distance_to(swing_anchor.global_position), 105.0)
@@ -1541,6 +1586,7 @@ func launch() -> void:
 	is_swinging = false
 	swing_anchor = null
 	velocity = Vector2.UP * launch_speed
+	play_sfx(jump_sound_player)
 	was_on_floor = false
 	jump_cooldown_remaining = jump_cooldown
 
