@@ -40,7 +40,7 @@
   </main>
   <script src="index.js"></script>
   <script>
-  const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":true,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":46009128,"index.wasm":39514754},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4};
+  const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":false,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":47239228,"index.wasm":39514754},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4};
   const GODOT_THREADS_ENABLED = false;
   const engine = new Engine(GODOT_CONFIG);
   (() => {
@@ -51,19 +51,27 @@
     const progress = document.getElementById('mmcq-progress');
     const status = document.getElementById('mmcq-status');
     const errorBox = document.getElementById('mmcq-error');
+    let loadTimeoutId = 0;
+    let failed = false;
     const showFailure = (error) => {
+      if (failed) return;
+      failed = true;
+      window.clearTimeout(loadTimeoutId);
       console.error(error);
+      progress.style.width = '100%';
+      progress.style.background = '#fd8686';
       status.textContent = 'Unable to start Jelly Swing Arcade';
       errorBox.textContent = error instanceof Error ? error.message : String(error);
       errorBox.style.display = 'block';
     };
     const missing = Engine.getMissingFeatures({ threads: GODOT_THREADS_ENABLED });
     if (missing.length) {
-      showFailure('This browser is missing required features:
-' + missing.join('
-'));
+      showFailure(`This browser is missing required features:\n${missing.join('\n')}`);
       return;
     }
+    loadTimeoutId = window.setTimeout(() => {
+      showFailure(new Error('Loading timed out. Check your connection, then refresh this page.'));
+    }, 120000);
     engine.startGame({
       onProgress: (current, total) => {
         if (current > 0 && total > 0) {
@@ -76,6 +84,7 @@
         }
       },
     }).then(() => {
+      window.clearTimeout(loadTimeoutId);
       progress.style.width = '100%';
       status.textContent = 'Ready!';
       window.setTimeout(() => overlay.classList.add('is-hidden'), 140);
