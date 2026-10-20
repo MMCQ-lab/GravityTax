@@ -1,3 +1,16 @@
 # Godot 4+ specific ignores
 .godot/
 /android/
+
+/build/
+*.xcarchive/
+*.ipa
+
+# Generated Godot iOS export files
+/JellySwing.xcframework/
+/MoltenVK.xcframework/
+/JellySwing.xcodeproj/
+/JellySwing/
+/JellySwing.pck
+/libgodot_camera.visionos.*.xcframework/
+*.ipa

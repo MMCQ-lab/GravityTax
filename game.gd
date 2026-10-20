@@ -83,6 +83,7 @@ const EPIC_SKIN_TEXTURES := [
 ]
 
 const SCORE_SAVE_PATH := "user://gravity_tax_scores.cfg"
+const MMCQ_LAB_LOGO := preload("res://images/mmcq_lab_logo.png")
 
 
 
@@ -509,6 +510,7 @@ var straighten_tween: Tween
 
 
 var was_on_floor: bool = false
+var studio_intro_played := false
 
 
 
@@ -625,9 +627,40 @@ func _ready() -> void:
 	build_skin_shop()
 
 	select_chest("COMMON")
+	call_deferred("show_studio_intro")
 
 
 
+
+
+func show_studio_intro() -> void:
+	# One brief studio card appears after the engine has finished booting.
+	if studio_intro_played:
+		return
+	studio_intro_played = true
+	var intro_layer := CanvasLayer.new()
+	intro_layer.layer = 100
+	var backdrop := ColorRect.new()
+	backdrop.color = Color("070918")
+	backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	backdrop.mouse_filter = Control.MOUSE_FILTER_STOP
+	intro_layer.add_child(backdrop)
+	var logo := TextureRect.new()
+	logo.texture = MMCQ_LAB_LOGO
+	logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	logo.set_anchors_preset(Control.PRESET_CENTER)
+	logo.position = Vector2(-155.0, -155.0)
+	logo.size = Vector2(310.0, 310.0)
+	backdrop.add_child(logo)
+	add_child(intro_layer)
+	# ColorRect is a CanvasItem, so its modulation also fades the logo child.
+	backdrop.modulate = Color(1.0, 1.0, 1.0, 0.0)
+	var intro_tween := create_tween()
+	intro_tween.tween_property(backdrop, "modulate:a", 1.0, 0.28)
+	intro_tween.tween_interval(1.0)
+	intro_tween.tween_property(backdrop, "modulate:a", 0.0, 0.35)
+	intro_tween.tween_callback(intro_layer.queue_free)
 
 
 func setup_audio() -> void:
