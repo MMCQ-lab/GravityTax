@@ -160,6 +160,10 @@ var floor_y: float = 9000.0
 # finish line so the score remains a single uninterrupted climb total.
 const CLIMB_LEVEL_HEIGHT := 16000.0
 const LAVA_JAM_COLOR := Color("ff5f8f")
+const CLIMB_SKY_CHAIN: Array[Color] = [
+	Color("ffe4f2"), Color("9ad7ff"), Color("c9b5ff"),
+	Color("ffc4dc"), Color("ffe1a8"), Color("a8ecdf"),
+]
 const CLIMB_LEVEL_TOP_Y := 220.0
 var climb_level := 1
 var climb_height_bank := 0
@@ -1289,26 +1293,13 @@ func configure_climb_level() -> void:
 	floor_rect.position = Vector2(0.0, floor_y)
 	floor_rect.size = Vector2(map_width, 180.0)
 
-	match (climb_level - 1) % 5:
-		0:
-			sky_top_color = Color("9ad7ff")
-			sky_bottom_color = Color("ffe4f2")
-		1:
-			sky_top_color = Color("b9a2ff")
-			sky_bottom_color = Color("ffd6f3")
-		2:
-			sky_top_color = Color("6f8fe8")
-			sky_bottom_color = Color("a8ecef")
-		3:
-			sky_top_color = Color("ff9fc0")
-			sky_bottom_color = Color("ffe1a8")
-		_:
-			sky_top_color = Color("6cc8c9")
-			sky_bottom_color = Color("d2f7dd")
-
-	# Level one has a visible lava floor. Later levels fall into a dark void,
-	# while retaining the same fail boundary for the physics.
-	floor_rect.color = LAVA_JAM_COLOR if climb_level == 1 else Color("4a2d6b")
+	# Each course's bottom colour is the previous course's top colour, so the
+	# climb reads as one continuous sky that keeps changing as Jelly rises.
+	sky_bottom_color = CLIMB_SKY_CHAIN[(climb_level - 1) % CLIMB_SKY_CHAIN.size()]
+	sky_top_color = CLIMB_SKY_CHAIN[climb_level % CLIMB_SKY_CHAIN.size()]
+	# Level one has a visible jam-lava floor. Later levels have no visible floor
+	# (falling off the bottom still ends the run), so nothing breaks the sky.
+	floor_rect.color = LAVA_JAM_COLOR if climb_level == 1 else Color(sky_bottom_color, 0.0)
 	level_label.text = "LEVEL %d" % climb_level
 
 
@@ -4054,9 +4045,14 @@ func _draw() -> void:
 
 	var map_border := Rect2(0.0, 0.0, map_width, floor_y)
 
-	draw_rect(map_border, Color(1.0, 0.55, 0.78, 0.25), false, 28.0, true)
+	if active_game_mode == "CLIMB":
+		# Climb courses stack into one endless sky: no rim, and the sky keeps
+		# going below the floor line instead of ending in a hard edge.
+		draw_rect(Rect2(visible_bounds.position.x - 32.0, floor_y, visible_bounds.size.x + 64.0, 2400.0), sky_bottom_color)
+	else:
+		draw_rect(map_border, Color(1.0, 0.55, 0.78, 0.25), false, 28.0, true)
 
-	draw_rect(map_border, Color(1.0, 0.62, 0.82, 0.95), false, 8.0, true)
+		draw_rect(map_border, Color(1.0, 0.62, 0.82, 0.95), false, 8.0, true)
 
 
 
