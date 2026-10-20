@@ -1,4 +1,15 @@
 ## License
 
-Copyright © 2026 MMCQ-Lab.
+Copyright (c) 2026 MMCQ-Lab
 All rights reserved.
+
+All original source code, artwork, and
+other original assets are proprietary.
+
+Third-Party Audio:
+This game contains music and sound effects
+obtained from Pixabay and used under the
+Pixabay Content License.
+
+These audio assets remain subject to their
+original licenses and are not owned by MMCQ-Lab.
