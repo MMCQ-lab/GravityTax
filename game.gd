@@ -361,7 +361,13 @@ var chest_next_tick := 0.0
 var chest_target_skin := 0
 
 var chest_reward_pool: Array[int] = []
-
+# A spun chest's Jelly waits here until the player claims it (or rerolls once
+# by watching an ad). -1 means nothing is waiting.
+var chest_pending_skin := -1
+var chest_reroll_used := false
+var chest_claim_button: Button
+var chest_reroll_button: Button
+var banner_ad: PlaceholderBanner
 var chest_carousel_items: Array[TextureButton] = []
 
 var chest_carousel_target_index := 24
@@ -752,6 +758,36 @@ func apply_cute_ui() -> void:
 		CuteStyle.style_label(future_chest_row.get_node(tier_label_name) as Label, CuteStyle.INK_SOFT, 14)
 	for chest_picker in [common_chest_picker, uncommon_chest_button, rare_chest_picker, epic_chest_picker, legendary_chest_picker]:
 		CuteStyle.add_squish(chest_picker)
+	chest_claim_button = Button.new()
+	chest_claim_button.name = "ClaimButton"
+	chest_claim_button.text = "CLAIM"
+	chest_claim_button.position = Vector2(105.0, 815.0)
+	chest_claim_button.size = Vector2(210.0, 70.0)
+	chest_claim_button.add_theme_font_size_override("font_size", 26)
+	CuteStyle.style_button(chest_claim_button, CuteStyle.MINT)
+	chest_claim_button.pressed.connect(claim_pending_chest)
+	chest_claim_button.hide()
+	shop_screen.add_child(chest_claim_button)
+	chest_reroll_button = Button.new()
+	chest_reroll_button.name = "RerollButton"
+	chest_reroll_button.text = "REROLL (WATCH AD)"
+	chest_reroll_button.position = Vector2(330.0, 815.0)
+	chest_reroll_button.size = Vector2(285.0, 70.0)
+	chest_reroll_button.add_theme_font_size_override("font_size", 20)
+	CuteStyle.style_button(chest_reroll_button, CuteStyle.BUTTER, CuteStyle.INK)
+	chest_reroll_button.pressed.connect(reroll_pending_chest)
+	chest_reroll_button.hide()
+	shop_screen.add_child(chest_reroll_button)
+
+	# Bottom banner ad space. Menu buttons move up so nothing hides behind it.
+	banner_ad = PlaceholderBanner.new()
+	add_child(banner_ad)
+	for mode_button in [start_button, climb_button, tag_button]:
+		mode_button.position.y = 890.0
+	shop_button.position.y = 1005.0
+	menu_wallet_label.position.y = 1106.0
+	shop_back_button.position.y = 1082.0
+
 	CuteStyle.round_panel(ad_panel, CuteStyle.CREAM, CuteStyle.WHITE, 5, 40)
 	var ad_title := ad_panel.get_node("Title") as Label
 	CuteStyle.style_label(ad_title, CuteStyle.ACCENT, 40)
@@ -854,9 +890,10 @@ func play_sfx(player: AudioStreamPlayer) -> void:
 
 
 func _process(delta: float) -> void:
-
+	if banner_ad:
+		# Banner only on menu-style screens, never over active gameplay.
+		banner_ad.visible = start_screen.visible or shop_screen.visible or game_over_screen.visible
 	if not chest_rolling:
-
 		return
 
 	chest_roll_elapsed += delta
@@ -3004,7 +3041,10 @@ func load_profile() -> void:
 		for skin_id_text in unlocked_text.split(",", false):
 
 			unlocked_skins.append(int(skin_id_text))
-
+		# A chest reward left unclaimed when the app closed is granted on launch.
+		var pending_from_save := int(profile_file.get_value("profile", "pending_chest_skin", -1))
+		if pending_from_save >= 0 and pending_from_save < skin_definitions.size() and not unlocked_skins.has(pending_from_save):
+			unlocked_skins.append(pending_from_save)
 	if not unlocked_skins.has(0):
 
 		unlocked_skins.append(0)
@@ -3026,7 +3066,7 @@ func save_profile() -> void:
 	profile_file.set_value("profile", "wallet_coins", wallet_coins)
 
 	profile_file.set_value("profile", "selected_skin", selected_skin)
-
+	profile_file.set_value("profile", "pending_chest_skin", chest_pending_skin)
 	var saved_skin_ids: Array[String] = []
 
 	for skin_id in unlocked_skins:
@@ -3272,6 +3312,9 @@ func buy_or_equip_skin(skin_id: int) -> void:
 
 func select_chest(tier_name: String) -> void:
 
+	# Picking another chest claims any Jelly still waiting from the last one.
+	if chest_claim_button:
+		claim_pending_chest()
 	selected_chest_tier = tier_name
 
 	refresh_chest_selection_ui()
@@ -3378,10 +3421,8 @@ func claim_test_ad_reward() -> void:
 
 func open_chest(tier_name: String, cost: int, reward_pool: Array[int], chest_texture: Texture2D, description: String) -> void:
 
-	if chest_rolling:
-
+	if chest_rolling or chest_pending_skin >= 0:
 		return
-
 	var locked_skins: Array[int] = []
 
 	for skin_id in reward_pool:
@@ -3403,9 +3444,9 @@ func open_chest(tier_name: String, cost: int, reward_pool: Array[int], chest_tex
 		return
 
 	wallet_coins -= cost
-
+	chest_reroll_used = false
+	save_profile()
 	play_sfx(swoosh_sound_player)
-
 	chest_target_skin = locked_skins.pick_random()
 
 	chest_reward_pool = reward_pool
@@ -3519,34 +3560,91 @@ func update_chest_carousel(progress: float) -> void:
 
 
 func finish_chest() -> void:
-
 	chest_rolling = false
-
-	unlocked_skins.append(chest_target_skin)
-
-	selected_skin = chest_target_skin
-
-	# Keep the winning Jelly centered in the spinner instead of switching to a
-
-	# separate large cube preview.
-
-	chest_preview.hide()
-
-	chest_carousel_backdrop.show()
-
-	chest_carousel.show()
-
-	chest_result_label.text = "UNLOCKED: %s!" % str(skin_definitions[chest_target_skin]["name"])
-
-	apply_selected_skin()
-
+	chest_pending_skin = chest_target_skin
+	# Persist the pending reward so closing the app mid-choice never loses it.
 	save_profile()
-
+	# Keep the winning Jelly centered in the spinner instead of switching to a
+	# separate large cube preview.
+	chest_preview.hide()
+	chest_carousel_backdrop.show()
+	chest_carousel.show()
+	chest_result_label.text = "YOU GOT: %s!" % str(skin_definitions[chest_target_skin]["name"])
 	update_coin_counter()
+	refresh_chest_claim_ui()
 
-	shop_back_button.disabled = false
 
+
+
+
+func chest_reroll_candidates() -> Array[int]:
+	var candidates: Array[int] = []
+	for skin_id in chest_reward_pool:
+		if not unlocked_skins.has(skin_id) and skin_id != chest_pending_skin and not candidates.has(skin_id):
+			candidates.append(skin_id)
+	return candidates
+
+
+
+
+
+func refresh_chest_claim_ui() -> void:
+	var pending := chest_pending_skin >= 0
+	var on_chest_tab := chest_tab_button.disabled
+	chest_claim_button.visible = pending and on_chest_tab
+	chest_reroll_button.visible = pending and on_chest_tab and not chest_reroll_used and not chest_reroll_candidates().is_empty()
+	common_chest_button.visible = not pending and on_chest_tab
+	shop_back_button.disabled = chest_rolling
+
+
+
+
+
+func claim_pending_chest() -> void:
+	if chest_pending_skin < 0:
+		return
+	var skin_id := chest_pending_skin
+	chest_pending_skin = -1
+	chest_reroll_used = false
+	if not unlocked_skins.has(skin_id):
+		unlocked_skins.append(skin_id)
+	selected_skin = skin_id
+	chest_result_label.text = "UNLOCKED: %s!" % str(skin_definitions[skin_id]["name"])
+	play_sfx(collect_sound_player)
+	apply_selected_skin()
+	save_profile()
+	update_coin_counter()
 	build_skin_shop()
+	refresh_chest_claim_ui()
+
+
+
+
+
+func reroll_pending_chest() -> void:
+	# One ad-funded reroll per chest; it always lands on a different Jelly.
+	if chest_pending_skin < 0 or chest_reroll_used or chest_rolling:
+		return
+	var candidates := chest_reroll_candidates()
+	if candidates.is_empty():
+		return
+	chest_reroll_button.disabled = true
+	show_placeholder_ad(func() -> void:
+		chest_reroll_button.disabled = false
+		chest_reroll_used = true
+		chest_pending_skin = -1
+		chest_target_skin = candidates.pick_random()
+		chest_roll_elapsed = 0.0
+		chest_next_tick = 0.0
+		chest_rolling = true
+		chest_claim_button.hide()
+		chest_reroll_button.hide()
+		shop_back_button.disabled = true
+		play_sfx(swoosh_sound_player)
+		prepare_chest_carousel(chest_reward_pool, chest_target_skin)
+		chest_carousel_backdrop.show()
+		chest_carousel.show()
+	)
 
 
 
@@ -3567,7 +3665,8 @@ func open_shop() -> void:
 
 
 func close_shop() -> void:
-
+	# Never lose a won Jelly: leaving the shop claims anything still waiting.
+	claim_pending_chest()
 	shop_screen.hide()
 
 	start_screen.show()
@@ -3703,11 +3802,8 @@ func set_shop_tab(tab_name: String) -> void:
 	jelly_tab_button.disabled = showing_jellies
 
 	coins_tab_button.disabled = showing_coins
-
-
-
-
-
+	if chest_claim_button:
+		refresh_chest_claim_ui()
 func _input(event: InputEvent) -> void:
 
 	# iPhone browsers can send touch events directly to the viewport instead of
