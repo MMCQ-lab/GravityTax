@@ -38,7 +38,7 @@ jobs:
         with:
           xcode-version: "16.2"
 
-            - name: Install Godot and matching export templates
+      - name: Install Godot and matching export templates
         uses: chickensoft-games/setup-godot@v2.4.3
         with:
           version: ${{ env.GODOT_VERSION }}
