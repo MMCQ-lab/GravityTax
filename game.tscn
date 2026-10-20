@@ -1,9 +1,9 @@
 [gd_scene format=3 uid="uid://4qjf7waqhkv6"]
 
 [ext_resource type="Script" uid="uid://bqlsvqvfagkd7" path="res://game.gd" id="1_80nbo"]
-[ext_resource type="Texture2D" uid="uid://ba65lh7m3elma" path="res://images/cute cube face.png" id="2_e2o6t"]
+[ext_resource type="Texture2D" path="res://images/jelly_sprites/jelly_00.png" id="2_e2o6t"]
 [ext_resource type="Texture2D" uid="uid://cfd8pljc5twdy" path="res://images/purple_swing_orb.png" id="3_swing"]
-[ext_resource type="Texture2D" uid="uid://3k57hsjq4bi6" path="res://images/jelly_skin_catalog.png" id="4_skins"]
+[ext_resource type="Texture2D" path="res://images/jelly_sprite_sheet_fixed.png" id="4_skins"]
 [ext_resource type="Texture2D" uid="uid://dm3aryddc41hm" path="res://images/common_chest.png" id="5_chest"]
 [ext_resource type="Texture2D" uid="uid://bdtvt8iqp8hnd" path="res://images/uncommon_chest.png" id="6_uncommon"]
 [ext_resource type="Texture2D" uid="uid://cnohunftgasn8" path="res://images/rare_chest.png" id="7_rare"]

@@ -16,72 +16,17 @@ const MAGNET_TEXTURE := preload("res://images/magnet_powerup.png")
 
 const KNIFE_TEXTURE := preload("res://images/knife_powerup.png")
 
-const JELLY_TEXTURE := preload("res://images/cute cube face.png")
-
-const SKIN_CATALOG_TEXTURE := preload("res://images/jelly_skin_catalog.png")
-
 const COMMON_CHEST_TEXTURE := preload("res://images/common_chest.png")
-
 const UNCOMMON_CHEST_TEXTURE := preload("res://images/uncommon_chest.png")
-
-const RARE_ANIMAL_SKIN_TEXTURE := preload("res://images/rare_animal_jellies.png")
-
 const BACKGROUND_MUSIC := preload("res://sounds/backround1.mp3")
-
 const BACKGROUND_MUSIC_ALT := preload("res://sounds/backround2.mp3")
-
 const JUMP_SOUND := preload("res://sounds/bestuploadsever67aryan-jump-sound-531048.mp3")
-
 const BOUNCE_SOUND := preload("res://sounds/freesound_community-jump-climb-or-damage-sound-f-95942.mp3")
-
 const SWOOSH_SOUND := preload("res://sounds/alexzavesa-swoosh-1-463607.mp3")
-
 const ACTION_SOUND := preload("res://sounds/freesound_gamestudio-rpg-sword-attack-combo-28-388957.mp3")
-
 const GAME_OVER_SOUND := preload("res://sounds/universfield-game-over-deep-male-voice-clip-352695.mp3")
-
 const JETPACK_SOUND := preload("res://sounds/freesound_community-good-jetpack-sound-loop-96693.mp3")
-
 const COLLECT_SOUND := preload("res://sounds/liecio-collect-points-190037.mp3")
-
-const FOOD_SKIN_TEXTURES := [
-
-	preload("res://images/food_sushi_jelly.png"),
-
-	preload("res://images/food_donut_jelly.png"),
-
-	preload("res://images/food_strawberry_jelly.png"),
-
-	preload("res://images/food_cupcake_jelly.png"),
-
-	preload("res://images/food_watermelon_jelly.png")
-
-]
-
-const EPIC_SKIN_TEXTURES := [
-
-	preload("res://images/epic_pirate_jelly.png"),
-
-	preload("res://images/epic_ninja_jelly.png"),
-
-	preload("res://images/epic_space_jelly.png"),
-
-	preload("res://images/epic_speed_jelly.png"),
-
-	preload("res://images/epic_forest_jelly.png"),
-
-	preload("res://images/epic_wizard_jelly.png"),
-
-	preload("res://images/epic_dragon_jelly.png"),
-
-	preload("res://images/epic_arcade_jelly.png"),
-
-	preload("res://images/epic_mech_jelly.png"),
-
-	preload("res://images/epic_vigilante_jelly.png")
-
-]
-
 const SCORE_SAVE_PATH := "user://gravity_tax_scores.cfg"
 const MMCQ_LAB_LOGO := preload("res://images/mmcq_lab_logo.png")
 
@@ -265,63 +210,35 @@ var selected_skin := 0
 
 var unlocked_skins: Array[int] = [0]
 
+var jelly_sprite_textures: Array[Texture2D] = []
+
 var skin_definitions: Array[Dictionary] = [
 
-	{"name": "Jelly Blue", "price": 0, "body": "35e4f2", "face": "ffffff"},
+	{"name": "Ruby Jelly", "tier": "Common"},
 
-	{"name": "Bubblegum", "price": 15, "body": "ff73bd", "face": "fff0fa"},
+	{"name": "Tangerine Jelly", "tier": "Common"},
 
-	{"name": "Grape Pop", "price": 30, "body": "a66cff", "face": "f3eaff"},
+	{"name": "Sunny Jelly", "tier": "Common"},
 
-	{"name": "Lime Zing", "price": 50, "body": "91ef64", "face": "efffe5"},
+	{"name": "Lime Jelly", "tier": "Common"},
 
-	{"name": "Sunburst", "price": 75, "body": "ffba3d", "face": "fff5c7"},
+	{"name": "Ocean Jelly", "tier": "Common"},
 
-	{"name": "Cherry", "price": 110, "body": "f04c59", "face": "ffe8e9"},
+	{"name": "Bubblegum Jelly", "tier": "Common"},
 
-	{"name": "Midnight", "price": 160, "body": "34448f", "face": "dbe5ff"},
+	{"name": "Grape Jelly", "tier": "Common"},
 
-	{"name": "Mint Chip", "price": 220, "body": "42d8b3", "face": "e8fff8"},
+	{"name": "Aqua Jelly", "tier": "Common"},
 
-	{"name": "Lava Glow", "price": 300, "body": "ff5d22", "face": "fff0cc"},
+	{"name": "Marshmallow Jelly", "tier": "Common"},
 
-	{"name": "Galaxy", "price": 450, "body": "6328a8", "face": "ffd5ff"},
-
-	{"name": "Sushi Jelly", "tier": "Rare"},
-
-	{"name": "Donut Jelly", "tier": "Rare"},
-
-	{"name": "Strawberry Jelly", "tier": "Rare"},
-
-	{"name": "Cupcake Jelly", "tier": "Rare"},
-
-	{"name": "Watermelon Jelly", "tier": "Rare"},
-
-	{"name": "Straw Hat Jelly", "tier": "Epic"},
-
-	{"name": "Cyber Ninja Jelly", "tier": "Epic"},
-
-	{"name": "Space Ranger Jelly", "tier": "Epic"},
-
-	{"name": "Speed Racer Jelly", "tier": "Epic"},
-
-	{"name": "Forest King Jelly", "tier": "Epic"},
-
-	{"name": "Cosmic Wizard Jelly", "tier": "Epic"},
-
-	{"name": "Dragon Warrior Jelly", "tier": "Epic"},
-
-	{"name": "Arcade Alien Jelly", "tier": "Epic"},
-
-	{"name": "Mech Pilot Jelly", "tier": "Epic"},
-
-	{"name": "Moon Vigilante Jelly", "tier": "Epic"},
+	{"name": "Midnight Jelly", "tier": "Common"},
 
 	{"name": "Fox Jelly", "tier": "Uncommon"},
 
 	{"name": "Panda Jelly", "tier": "Uncommon"},
 
-	{"name": "Cat Jelly", "tier": "Uncommon"},
+	{"name": "Kitten Jelly", "tier": "Uncommon"},
 
 	{"name": "Bunny Jelly", "tier": "Uncommon"},
 
@@ -329,13 +246,73 @@ var skin_definitions: Array[Dictionary] = [
 
 	{"name": "Penguin Jelly", "tier": "Uncommon"},
 
-	{"name": "Frog Jelly", "tier": "Uncommon"},
-
 	{"name": "Axolotl Jelly", "tier": "Uncommon"},
+
+	{"name": "Monkey Jelly", "tier": "Uncommon"},
 
 	{"name": "Koala Jelly", "tier": "Uncommon"},
 
-	{"name": "Lion Jelly", "tier": "Uncommon"}
+	{"name": "Lion Jelly", "tier": "Uncommon"},
+
+	{"name": "Strawberry Jelly", "tier": "Rare"},
+
+	{"name": "Watermelon Jelly", "tier": "Rare"},
+
+	{"name": "Cherry Cupcake Jelly", "tier": "Rare"},
+
+	{"name": "Donut Jelly", "tier": "Rare"},
+
+	{"name": "Sushi Jelly", "tier": "Rare"},
+
+	{"name": "Chocolate Jelly", "tier": "Rare"},
+
+	{"name": "Mint Chip Jelly", "tier": "Rare"},
+
+	{"name": "Honey Jelly", "tier": "Rare"},
+
+	{"name": "Sprinkle Cupcake Jelly", "tier": "Rare"},
+
+	{"name": "Boba Jelly", "tier": "Rare"},
+
+	{"name": "Straw Hat Jelly", "tier": "Epic"},
+
+	{"name": "Cash Stack Jelly", "tier": "Epic"},
+
+	{"name": "Web Hero Jelly", "tier": "Epic"},
+
+	{"name": "Pixel Crawler Jelly", "tier": "Epic"},
+
+	{"name": "Galaxy Jelly", "tier": "Epic"},
+
+	{"name": "Ice Crystal Jelly", "tier": "Epic"},
+
+	{"name": "Sprout Jelly", "tier": "Epic"},
+
+	{"name": "Magma Jelly", "tier": "Epic"},
+
+	{"name": "Cloud Jelly", "tier": "Epic"},
+
+	{"name": "Arcade Bot Jelly", "tier": "Epic"},
+
+	{"name": "Neon Bot Jelly", "tier": "Legendary"},
+
+	{"name": "Demon King Jelly", "tier": "Legendary"},
+
+	{"name": "Forest Dragon Jelly", "tier": "Legendary"},
+
+	{"name": "Cosmic Knight Jelly", "tier": "Legendary"},
+
+	{"name": "Hooded Mech Jelly", "tier": "Legendary"},
+
+	{"name": "Pirate Captain Jelly", "tier": "Legendary"},
+
+	{"name": "Star Mushroom Jelly", "tier": "Legendary"},
+
+	{"name": "Sky Knight Jelly", "tier": "Legendary"},
+
+	{"name": "Shadow Knight Jelly", "tier": "Legendary"},
+
+	{"name": "Moon Mage Jelly", "tier": "Legendary"}
 
 ]
 
@@ -351,13 +328,13 @@ var chest_definitions: Dictionary = {
 
 	"COMMON": {"cost": 50, "rewards": [1, 2, 3, 4, 5, 6, 7, 8, 9], "texture": COMMON_CHEST_TEXTURE, "description": "Guaranteed new classic Jelly skin", "available": true},
 
-	"UNCOMMON": {"cost": 100, "rewards": [25, 26, 27, 28, 29, 30, 31, 32, 33, 34], "texture": UNCOMMON_CHEST_TEXTURE, "description": "Guaranteed cute animal Jelly", "available": true},
+	"UNCOMMON": {"cost": 100, "rewards": [10, 11, 12, 13, 14, 15, 16, 17, 18, 19], "texture": UNCOMMON_CHEST_TEXTURE, "description": "Guaranteed cute animal Jelly", "available": true},
 
-	"RARE": {"cost": 175, "rewards": [10, 11, 12, 13, 14], "texture": preload("res://images/rare_chest.png"), "description": "Guaranteed new food Jelly skin", "available": true},
+	"RARE": {"cost": 175, "rewards": [20, 21, 22, 23, 24, 25, 26, 27, 28, 29], "texture": preload("res://images/rare_chest.png"), "description": "Guaranteed new food Jelly skin", "available": true},
 
-	"EPIC": {"cost": 250, "rewards": [15, 16, 17, 18, 19, 20, 21, 22, 23, 24], "texture": preload("res://images/epic_chest.png"), "description": "Guaranteed pop-culture-inspired Jelly", "available": true},
+	"EPIC": {"cost": 250, "rewards": [30, 31, 32, 33, 34, 35, 36, 37, 38, 39], "texture": preload("res://images/epic_chest.png"), "description": "Guaranteed new epic Jelly skin", "available": true},
 
-	"LEGENDARY": {"cost": 0, "rewards": [], "texture": preload("res://images/legendary_chest.png"), "description": "Rewards coming soon", "available": false}
+	"LEGENDARY": {"cost": 500, "rewards": [40, 41, 42, 43, 44, 45, 46, 47, 48, 49], "texture": preload("res://images/legendary_chest.png"), "description": "Guaranteed new legendary Jelly skin", "available": true}
 
 }
 
@@ -2796,40 +2773,12 @@ func get_skin_sprite_scale(skin_id: int, skin_texture: Texture2D) -> Vector2:
 
 
 func create_skin_texture(skin_id: int) -> Texture2D:
-
-	if skin_id >= 25:
-
-		var animal_atlas := AtlasTexture.new()
-
-		animal_atlas.atlas = RARE_ANIMAL_SKIN_TEXTURE
-
-		var animal_index := skin_id - 25
-
-		animal_atlas.region = Rect2(float(animal_index % 2) * 512.0, float(animal_index / 2) * 307.2, 512.0, 307.2)
-
-		return animal_atlas
-
-	if skin_id >= 15:
-
-		return EPIC_SKIN_TEXTURES[skin_id - 15]
-
-	if skin_id >= 10:
-
-		return FOOD_SKIN_TEXTURES[skin_id - 10]
-
-	var atlas_texture := AtlasTexture.new()
-
-	atlas_texture.atlas = SKIN_CATALOG_TEXTURE
-
-	var column: int = skin_id % 2
-
-	var row: int = skin_id / 2
-
-	atlas_texture.region = Rect2(float(column) * 512.0, float(row) * 307.2, 512.0, 307.2)
-
-	return atlas_texture
-
-
+	# Every playable Jelly and bot uses a sprite cut directly from the supplied collection sheet.
+	var normalized_skin_id := clampi(skin_id, 0, skin_definitions.size() - 1)
+	while jelly_sprite_textures.size() <= normalized_skin_id:
+		var sprite_id := jelly_sprite_textures.size()
+		jelly_sprite_textures.append(load("res://images/jelly_sprites/jelly_%02d.png" % sprite_id) as Texture2D)
+	return jelly_sprite_textures[normalized_skin_id]
 
 
 
@@ -2847,13 +2796,13 @@ func build_skin_shop() -> void:
 
 		var skin_button := TextureButton.new()
 
-		skin_button.custom_minimum_size = Vector2(185.0, 104.0)
+		skin_button.custom_minimum_size = Vector2(185.0, 142.0)
 
 		skin_button.texture_normal = create_skin_texture(skin_id)
 
 		skin_button.ignore_texture_size = true
 
-		skin_button.stretch_mode = TextureButton.STRETCH_SCALE
+		skin_button.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
 
 		var owned := unlocked_skins.has(skin_id)
 
