@@ -20,7 +20,7 @@ permissions:
 jobs:
   build-ios:
     name: Build signed iOS IPA
-    runs-on: macos-14
+    runs-on: macos-26
     timeout-minutes: 45
     env:
       GODOT_VERSION: 4.7.2
@@ -32,11 +32,11 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      # Xcode 16.2 is available on macos-14 and is compatible with modern App Store submissions.
+      # Xcode 16.2 is available on macos-14 and is compatible with modern App Store submissions
       - name: Select Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: "16.2"
+          xcode-version: "26.3"
 
       - name: Install Godot and matching export templates
         uses: chickensoft-games/setup-godot@v2.4.3
