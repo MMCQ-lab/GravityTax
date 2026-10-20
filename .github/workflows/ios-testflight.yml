@@ -61,11 +61,10 @@ jobs:
           # Verify PKCS12 password before macOS Keychain import
           echo "Checking certificate and password..."
 
-          if openssl pkcs12 \
+           if openssl pkcs12 \
           -in "$CERT_PATH" \
           -passin env:APPLE_CERTIFICATE_PASSWORD \
-          -noout \
-          -legacy; then
+          -noout; then
           echo "Certificate password verified successfully."
           else
           echo "::error::Certificate and password do not match, or PKCS12 format is unsupported."
