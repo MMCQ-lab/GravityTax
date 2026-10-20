@@ -7,13 +7,13 @@ extends CanvasLayer
 signal finished(coins: int, revive: bool)
 
 const SLICES := [
-	{"label": "5", "coins": 5, "weight": 22.0, "color": Color("ffc3df")},
+	{"label": "5", "coins": 5, "weight": 22.0, "color": Color("c7e6ff")},
 	{"label": "10", "coins": 10, "weight": 22.0, "color": Color("bdeedd")},
-	{"label": "15", "coins": 15, "weight": 18.0, "color": Color("d9ccff")},
+	{"label": "15", "coins": 15, "weight": 18.0, "color": Color("d9d4ff")},
 	{"label": "25", "coins": 25, "weight": 14.0, "color": Color("ffe6a1")},
-	{"label": "50", "coins": 50, "weight": 8.0, "color": Color("bfe6ff")},
-	{"label": "100", "coins": 100, "weight": 4.0, "color": Color("ffd0b5")},
-	{"label": "REVIVE", "coins": 10, "weight": 5.0, "color": Color("ff5ea9"), "revive": true},
+	{"label": "50", "coins": 50, "weight": 8.0, "color": Color("b9f0e8")},
+	{"label": "100", "coins": 100, "weight": 4.0, "color": Color("ffd2b0")},
+	{"label": "REVIVE", "coins": 10, "weight": 5.0, "color": Color("3a8dff"), "revive": true},
 ]
 
 var allow_revive := true
@@ -56,7 +56,7 @@ func _ready() -> void:
 	_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_title.position = Vector2(0.0, 34.0)
 	_title.size = Vector2(card.size.x, 70.0)
-	CuteStyle.style_label(_title, CuteStyle.HOT_PINK, 54, CuteStyle.WHITE, 10)
+	CuteStyle.style_label(_title, CuteStyle.ACCENT, 54, CuteStyle.WHITE, 10)
 	card.add_child(_title)
 
 	var subtitle := Label.new()
@@ -99,7 +99,7 @@ func _ready() -> void:
 	_spin_button.position = Vector2((card.size.x - 320.0) * 0.5, 720.0)
 	_spin_button.size = Vector2(320.0, 96.0)
 	_spin_button.add_theme_font_size_override("font_size", 38)
-	CuteStyle.style_button(_spin_button, CuteStyle.HOT_PINK)
+	CuteStyle.style_button(_spin_button, CuteStyle.ACCENT)
 	_spin_button.pressed.connect(_on_button_pressed)
 	card.add_child(_spin_button)
 
@@ -168,13 +168,13 @@ func _show_result() -> void:
 	var revive := bool(slice.get("revive", false))
 	if revive:
 		_result_label.text = "REVIVED!  +%d COINS" % int(slice["coins"])
-		_result_label.add_theme_color_override("font_color", CuteStyle.HOT_PINK)
+		_result_label.add_theme_color_override("font_color", CuteStyle.ACCENT)
 		_spin_button.text = "KEEP GOING!"
 	else:
 		_result_label.text = "+%d COINS!" % int(slice["coins"])
 		_spin_button.text = "YAY!"
 	_spin_button.disabled = false
-	CuteStyle.style_button(_spin_button, CuteStyle.MINT if not revive else CuteStyle.HOT_PINK)
+	CuteStyle.style_button(_spin_button, CuteStyle.MINT if not revive else CuteStyle.ACCENT)
 	CuteStyle.pop_in(_result_label)
 
 
@@ -207,9 +207,9 @@ func _draw_wheel() -> void:
 	# Little candy lights around the rim.
 	for light in range(16):
 		var angle := TAU * float(light) / 16.0
-		_wheel.draw_circle(center + Vector2(cos(angle), sin(angle)) * (radius + 1.0), 6.0, CuteStyle.BUTTER if light % 2 == 0 else CuteStyle.PINK)
+		_wheel.draw_circle(center + Vector2(cos(angle), sin(angle)) * (radius + 1.0), 6.0, CuteStyle.BUTTER if light % 2 == 0 else CuteStyle.CORAL)
 	_wheel.draw_circle(center, 44.0, CuteStyle.WHITE)
-	_wheel.draw_circle(center, 34.0, CuteStyle.PINK)
+	_wheel.draw_circle(center, 34.0, CuteStyle.CORAL)
 	_wheel.draw_circle(center + Vector2(-10.0, -10.0), 9.0, Color(1, 1, 1, 0.75))
 
 
@@ -218,4 +218,4 @@ func _draw_pointer(pointer: Control) -> void:
 	var tri := PackedVector2Array([top + Vector2(-26.0, -22.0), top + Vector2(26.0, -22.0), top + Vector2(0.0, 30.0)])
 	var outline := PackedVector2Array([top + Vector2(-34.0, -28.0), top + Vector2(34.0, -28.0), top + Vector2(0.0, 40.0)])
 	pointer.draw_colored_polygon(outline, CuteStyle.WHITE)
-	pointer.draw_colored_polygon(tri, CuteStyle.HOT_PINK)
+	pointer.draw_colored_polygon(tri, CuteStyle.ACCENT)

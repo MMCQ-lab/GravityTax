@@ -159,10 +159,10 @@ var floor_y: float = 9000.0
 # Sky Climb is split into tall, replayable courses. Height is banked at each
 # finish line so the score remains a single uninterrupted climb total.
 const CLIMB_LEVEL_HEIGHT := 16000.0
-const LAVA_JAM_COLOR := Color("ff5f8f")
+const LAVA_JAM_COLOR := Color("ff7a3d")
 const CLIMB_SKY_CHAIN: Array[Color] = [
-	Color("ffe4f2"), Color("9ad7ff"), Color("c9b5ff"),
-	Color("ffc4dc"), Color("ffe1a8"), Color("a8ecdf"),
+	Color("e3f3ff"), Color("9ad7ff"), Color("b8c4ff"),
+	Color("a8ecdf"), Color("ffe1a8"), Color("c6eaff"),
 ]
 const CLIMB_LEVEL_TOP_Y := 220.0
 var climb_level := 1
@@ -178,7 +178,7 @@ var jelly_swipe_release_msec := 0
 
 var sky_top_color := Color("9ad7ff")
 
-var sky_bottom_color := Color("ffe4f2")
+var sky_bottom_color := Color("e3f3ff")
 
 var anchor_count := 560
 
@@ -670,7 +670,7 @@ func apply_cute_ui() -> void:
 	height_score_label.offset_right = -20.0
 	height_score_label.offset_top = 22.0
 	height_score_label.offset_bottom = 74.0
-	CuteStyle.pill_label(level_label, Color(CuteStyle.HOT_PINK, 0.95), CuteStyle.WHITE)
+	CuteStyle.pill_label(level_label, Color(CuteStyle.ACCENT, 0.95), CuteStyle.WHITE)
 	level_label.add_theme_font_size_override("font_size", 19)
 	level_label.anchor_left = 1.0
 	level_label.anchor_right = 1.0
@@ -679,12 +679,12 @@ func apply_cute_ui() -> void:
 	level_label.offset_top = 82.0
 	level_label.offset_bottom = 116.0
 	CuteStyle.pill_label(tag_status_label, Color(CuteStyle.PEACH, 0.95), CuteStyle.INK)
-	CuteStyle.style_label(power_message, CuteStyle.HOT_PINK, 36, CuteStyle.WHITE, 10)
-	CuteStyle.round_panel(leaderboard_panel, Color(CuteStyle.WHITE, 0.82), Color(CuteStyle.PINK, 0.9), 3, 24)
+	CuteStyle.style_label(power_message, CuteStyle.ACCENT, 36, CuteStyle.WHITE, 10)
+	CuteStyle.round_panel(leaderboard_panel, Color(CuteStyle.WHITE, 0.82), Color(CuteStyle.SKY, 0.9), 3, 24)
 	CuteStyle.style_label(leaderboard_label, CuteStyle.INK, 20)
 
-	# Gameplay touches: a pink licorice rope with rounded ends.
-	swing_rope.default_color = Color("ff7fbf")
+	# Gameplay touches: an orange candy rope with rounded ends.
+	swing_rope.default_color = Color("ff9248")
 	swing_rope.width = 7.0
 	swing_rope.begin_cap_mode = Line2D.LINE_CAP_ROUND
 	swing_rope.end_cap_mode = Line2D.LINE_CAP_ROUND
@@ -693,7 +693,7 @@ func apply_cute_ui() -> void:
 	CuteStyle.style_button(start_button, CuteStyle.MINT)
 	CuteStyle.style_button(climb_button, CuteStyle.SKY)
 	CuteStyle.style_button(tag_button, CuteStyle.PEACH)
-	CuteStyle.style_button(shop_button, CuteStyle.HOT_PINK)
+	CuteStyle.style_button(shop_button, CuteStyle.ACCENT)
 	menu_wallet_label.show()
 	menu_wallet_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	CuteStyle.pill_label(menu_wallet_label, Color(CuteStyle.BUTTER, 0.95), CuteStyle.INK)
@@ -701,8 +701,8 @@ func apply_cute_ui() -> void:
 	menu_wallet_label.position = Vector2(230.0, 1205.0)
 	menu_wallet_label.size = Vector2(260.0, 44.0)
 
-	# Game over: soft pink veil with a rounded cream card.
-	game_over_screen.color = Color(CuteStyle.PINK.lerp(CuteStyle.LAVENDER, 0.5), 0.55)
+	# Game over: soft blue veil with a rounded cream card.
+	game_over_screen.color = Color(CuteStyle.SKY.lerp(CuteStyle.LAVENDER, 0.5), 0.55)
 	game_over_card = Panel.new()
 	game_over_card.name = "CuteCard"
 	game_over_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -712,8 +712,8 @@ func apply_cute_ui() -> void:
 	game_over_screen.add_child(game_over_card)
 	game_over_screen.move_child(game_over_card, 0)
 	var game_over_title := game_over_screen.get_node("GameOver") as Label
-	game_over_title.text = "OOPSIE!"
-	CuteStyle.style_label(game_over_title, CuteStyle.HOT_PINK, 58, CuteStyle.WHITE, 10)
+	game_over_title.text = "OOPS!"
+	CuteStyle.style_label(game_over_title, CuteStyle.ACCENT, 58, CuteStyle.WHITE, 10)
 	CuteStyle.style_label(game_over_best_label, CuteStyle.INK, 28)
 	CuteStyle.style_label(game_over_run_label, CuteStyle.INK_SOFT, 21)
 	continue_button = Button.new()
@@ -733,18 +733,18 @@ func apply_cute_ui() -> void:
 	CuteStyle.style_button(main_menu_button, CuteStyle.LAVENDER)
 
 	# Shop / collection.
-	CuteStyle.gradient_backdrop(shop_screen, Color("ffd9ee"), Color("d6ecff"))
+	CuteStyle.gradient_backdrop(shop_screen, Color("d6efff"), Color("dcf7ee"))
 	var shop_title := shop_screen.get_node("Title") as Label
-	CuteStyle.style_label(shop_title, CuteStyle.HOT_PINK, 56, CuteStyle.WHITE, 12)
+	CuteStyle.style_label(shop_title, CuteStyle.ACCENT, 56, CuteStyle.WHITE, 12)
 	CuteStyle.style_label(shop_wallet_label, CuteStyle.INK, 26)
 	CuteStyle.style_tab(chest_tab_button, CuteStyle.PEACH)
 	CuteStyle.style_tab(jelly_tab_button, CuteStyle.LAVENDER)
 	CuteStyle.style_tab(coins_tab_button, CuteStyle.MINT)
 	CuteStyle.style_button(shop_back_button, CuteStyle.LAVENDER)
-	CuteStyle.style_button(common_chest_button, CuteStyle.HOT_PINK)
+	CuteStyle.style_button(common_chest_button, CuteStyle.ACCENT)
 	CuteStyle.round_panel(chest_card, CuteStyle.CREAM, CuteStyle.WHITE, 5, 40)
-	CuteStyle.round_panel(chest_carousel_backdrop, Color("f3e8ff"), Color(CuteStyle.LAVENDER, 0.8), 3, 22)
-	CuteStyle.style_label(chest_heading, CuteStyle.HOT_PINK, 32)
+	CuteStyle.round_panel(chest_carousel_backdrop, Color("eaf2ff"), Color(CuteStyle.SKY, 0.8), 3, 22)
+	CuteStyle.style_label(chest_heading, CuteStyle.ACCENT, 32)
 	CuteStyle.style_label(chest_description, CuteStyle.INK_SOFT, 19)
 	CuteStyle.style_label(chest_result_label, CuteStyle.INK, 18)
 	CuteStyle.style_label(future_chest_row.get_node("Title") as Label, CuteStyle.INK, 18)
@@ -754,7 +754,7 @@ func apply_cute_ui() -> void:
 		CuteStyle.add_squish(chest_picker)
 	CuteStyle.round_panel(ad_panel, CuteStyle.CREAM, CuteStyle.WHITE, 5, 40)
 	var ad_title := ad_panel.get_node("Title") as Label
-	CuteStyle.style_label(ad_title, CuteStyle.HOT_PINK, 40)
+	CuteStyle.style_label(ad_title, CuteStyle.ACCENT, 40)
 	var ad_description := ad_panel.get_node("Description") as Label
 	ad_description.text = "Watch a short ad\nfor free coins!"
 	CuteStyle.style_label(ad_description, CuteStyle.INK_SOFT, 24)
@@ -3157,7 +3157,7 @@ func build_skin_shop() -> void:
 
 		var owned := unlocked_skins.has(skin_id)
 		# Rounded card tinted by rarity, drawn behind the Jelly artwork.
-		var tier_colors := {"Common": CuteStyle.MINT, "Uncommon": CuteStyle.SKY, "Rare": CuteStyle.LAVENDER, "Epic": CuteStyle.PINK, "Legendary": CuteStyle.BUTTER}
+		var tier_colors := {"Common": CuteStyle.MINT, "Uncommon": CuteStyle.SKY, "Rare": CuteStyle.LAVENDER, "Epic": CuteStyle.CORAL, "Legendary": CuteStyle.BUTTER}
 		var tier_color: Color = tier_colors.get(str(skin.get("tier", "Common")), CuteStyle.MINT)
 		var card := Panel.new()
 		card.show_behind_parent = true
@@ -3184,7 +3184,7 @@ func build_skin_shop() -> void:
 
 			equipped_outline.border_width_bottom = 4
 
-			equipped_outline.border_color = CuteStyle.HOT_PINK
+			equipped_outline.border_color = CuteStyle.ACCENT
 
 			equipped_outline.corner_radius_top_left = 14
 
@@ -3194,7 +3194,7 @@ func build_skin_shop() -> void:
 
 			equipped_outline.corner_radius_bottom_left = 14
 
-			equipped_outline.shadow_color = Color(CuteStyle.HOT_PINK, 0.45)
+			equipped_outline.shadow_color = Color(CuteStyle.ACCENT, 0.45)
 
 			equipped_outline.shadow_size = 9
 
@@ -4050,9 +4050,9 @@ func _draw() -> void:
 		# going below the floor line instead of ending in a hard edge.
 		draw_rect(Rect2(visible_bounds.position.x - 32.0, floor_y, visible_bounds.size.x + 64.0, 2400.0), sky_bottom_color)
 	else:
-		draw_rect(map_border, Color(1.0, 0.55, 0.78, 0.25), false, 28.0, true)
+		draw_rect(map_border, Color(0.4, 0.72, 1.0, 0.25), false, 28.0, true)
 
-		draw_rect(map_border, Color(1.0, 0.62, 0.82, 0.95), false, 8.0, true)
+		draw_rect(map_border, Color(0.45, 0.76, 1.0, 0.95), false, 8.0, true)
 
 
 
@@ -4087,7 +4087,7 @@ func _draw() -> void:
 
 			var ember_y := floor_y - 7.0 + sin(world_elapsed * 3.0 + float(ember_x) * 0.08) * 8.0
 
-			draw_circle(Vector2(float(ember_x), ember_y), 11.0, Color("ffd0e0"))
+			draw_circle(Vector2(float(ember_x), ember_y), 11.0, Color("ffd2a6"))
 			draw_circle(Vector2(float(ember_x) - 3.0, ember_y - 3.0), 3.5, Color(1.0, 1.0, 1.0, 0.8))
 
 
@@ -4132,7 +4132,7 @@ func draw_sky_decorations(visible_bounds: Rect2) -> void:
 
 func draw_cute_cloud(center: Vector2, cloud_scale: float) -> void:
 	var puff := Color(1.0, 1.0, 1.0, 0.72)
-	var shade := Color(1.0, 0.86, 0.95, 0.55)
+	var shade := Color(0.84, 0.93, 1.0, 0.6)
 	draw_circle(center + Vector2(-58.0, 14.0) * cloud_scale, 40.0 * cloud_scale, shade)
 	draw_circle(center + Vector2(52.0, 16.0) * cloud_scale, 42.0 * cloud_scale, shade)
 	draw_circle(center + Vector2(-50.0, 8.0) * cloud_scale, 40.0 * cloud_scale, puff)
@@ -4180,7 +4180,7 @@ func draw_cute_pad(pad_position: Vector2) -> void:
 	var left := Vector2(pad_rect.position.x + radius, pad_position.y)
 	var right := Vector2(pad_rect.end.x - radius, pad_position.y)
 	var outline := Color("ffffff")
-	var body := Color("ff9fd0")
+	var body := Color("5fd6c6")
 	draw_circle(left, radius + 3.0, outline)
 	draw_circle(right, radius + 3.0, outline)
 	draw_rect(Rect2(left - Vector2(0.0, radius + 3.0), Vector2(right.x - left.x, (radius + 3.0) * 2.0)), outline)

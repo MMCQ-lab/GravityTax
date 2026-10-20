@@ -4,16 +4,16 @@ extends RefCounted
 # Shared pastel palette and style helpers for every menu, popup and HUD element.
 # Keeping them in one place means the whole game can be re-skinned from here.
 
-const INK := Color("5b3770")          # soft plum used instead of black text
-const INK_SOFT := Color("8a6aa0")
-const CREAM := Color("fff8fc")
-const PINK := Color("ff8cc6")
-const HOT_PINK := Color("ff5ea9")
-const MINT := Color("63e2c3")
-const LAVENDER := Color("b49bff")
+const INK := Color("2f3d5c")          # soft navy used instead of black text
+const INK_SOFT := Color("66789a")
+const CREAM := Color("fbfdff")
+const CORAL := Color("ff8a65")
+const ACCENT := Color("3a8dff")
+const MINT := Color("3fd3b0")
+const LAVENDER := Color("9b8cff")
 const BUTTER := Color("ffd76a")
-const SKY := Color("8fd6ff")
-const PEACH := Color("ffb38a")
+const SKY := Color("5fbfff")
+const PEACH := Color("ffa257")
 const WHITE := Color(1.0, 1.0, 1.0, 1.0)
 
 const OPTIONAL_FONT_PATH := "res://fonts/cute.ttf"
@@ -76,7 +76,7 @@ static func style_button(button: BaseButton, color: Color, text_color: Color = W
 		# Tabs use "disabled" to mean "currently selected", so make it the loudest state.
 		disabled = box(color.lightened(0.05), 30, WHITE, 4, 0.30, 3)
 	else:
-		disabled = box(color.lerp(Color("d9cfe3"), 0.6), 30, Color("cbbfd8"), 3, 0.0, 2)
+		disabled = box(color.lerp(Color("d3dbe6"), 0.6), 30, Color("c3ccd9"), 3, 0.0, 2)
 	var focus := StyleBoxEmpty.new()
 	button.add_theme_stylebox_override("normal", normal)
 	button.add_theme_stylebox_override("hover", hover)
