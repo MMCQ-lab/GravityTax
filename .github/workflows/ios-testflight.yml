@@ -58,17 +58,20 @@ jobs:
           KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
           echo "$APPLE_CERTIFICATE_BASE64" | base64 --decode > "$CERT_PATH"
           echo "$APPLE_PROVISIONING_PROFILE_BASE64" | base64 --decode > "$PROFILE_PATH"
-          # Verify PKCS12 password before macOS Keychain import
+          # Verify the certificate using Homebrew OpenSSL 3
           echo "Checking certificate and password..."
+          brew install openssl@3
+          OPENSSL_BIN="$(brew --prefix openssl@3)/bin/openssl"
 
-           if openssl pkcs12 \
-          -in "$CERT_PATH" \
-          -passin env:APPLE_CERTIFICATE_PASSWORD \
-          -noout; then
-          echo "Certificate password verified successfully."
+          if "$OPENSSL_BIN" pkcs12 \
+            -legacy \
+            -in "$CERT_PATH" \
+            -passin env:APPLE_CERTIFICATE_PASSWORD \
+            -noout; then
+            echo "Certificate password verified successfully."
           else
-          echo "::error::Certificate and password do not match, or PKCS12 format is unsupported."
-          exit 1
+            echo "::error::PKCS12 verification failed."
+            exit 1
           fi
           security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
