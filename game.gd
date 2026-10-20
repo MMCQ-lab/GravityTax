@@ -159,6 +159,7 @@ var floor_y: float = 9000.0
 # Sky Climb is split into tall, replayable courses. Height is banked at each
 # finish line so the score remains a single uninterrupted climb total.
 const CLIMB_LEVEL_HEIGHT := 16000.0
+const LAVA_JAM_COLOR := Color("ff5f8f")
 const CLIMB_LEVEL_TOP_Y := 220.0
 var climb_level := 1
 var climb_height_bank := 0
@@ -171,9 +172,9 @@ var jelly_swipe_distance := 0.0
 
 var jelly_swipe_release_msec := 0
 
-var sky_top_color := Color("4bb5f2")
+var sky_top_color := Color("9ad7ff")
 
-var sky_bottom_color := Color("dff8ff")
+var sky_bottom_color := Color("ffe4f2")
 
 var anchor_count := 560
 
@@ -395,6 +396,16 @@ var world_elapsed := 0.0
 
 var game_over := false
 
+# Death flow: lucky spin, one ad-funded continue per run, and a placeholder
+# interstitial every few game overs. No ad SDK is wired up yet.
+const INTERSTITIAL_EVERY_GAME_OVERS := 3
+const REVIVE_SHIELD_SECONDS := 3.0
+var revive_shield_time := 0.0
+var continue_used_this_run := false
+var game_overs_since_ad := 0
+var continue_button: Button
+var game_over_card: Panel
+
 var game_started := false
 
 var power_message_time := 0.0
@@ -514,7 +525,7 @@ func _ready() -> void:
 
 	floor_rect.size = Vector2(map_width, 120)
 
-	floor_rect.color = Color("e64018")
+	floor_rect.color = LAVA_JAM_COLOR
 
 
 
@@ -615,7 +626,137 @@ func _ready() -> void:
 	build_skin_shop()
 
 	select_chest("COMMON")
+	apply_cute_ui()
+
 	call_deferred("show_studio_intro")
+
+
+
+
+
+func apply_cute_ui() -> void:
+	# One pastel, rounded, squishy look for every screen. Layout positions from
+	# game.tscn are kept; this only restyles and adds a few small extras.
+	var hud := $HUD
+	var cute_theme := CuteStyle.make_theme()
+	for child in hud.get_children():
+		if child is Control:
+			(child as Control).theme = cute_theme
+
+	# In-game HUD: candy pills that stay readable over any sky colour.
+	CuteStyle.pill_label(coin_counter, Color(CuteStyle.BUTTER, 0.95), CuteStyle.INK)
+	coin_counter.add_theme_font_size_override("font_size", 25)
+	coin_counter.position = Vector2(20.0, 22.0)
+	coin_counter.size = Vector2(300.0, 50.0)
+	CuteStyle.pill_label(high_score_label, Color(CuteStyle.WHITE, 0.88), CuteStyle.INK_SOFT)
+	high_score_label.add_theme_font_size_override("font_size", 20)
+	high_score_label.position = Vector2(20.0, 80.0)
+	high_score_label.size = Vector2(250.0, 40.0)
+	CuteStyle.pill_label(kill_counter, Color(CuteStyle.LAVENDER, 0.92), CuteStyle.WHITE)
+	kill_counter.add_theme_font_size_override("font_size", 20)
+	kill_counter.position = Vector2(20.0, 128.0)
+	kill_counter.size = Vector2(160.0, 40.0)
+	CuteStyle.pill_label(height_score_label, Color(CuteStyle.SKY, 0.95), CuteStyle.WHITE)
+	height_score_label.add_theme_color_override("font_outline_color", Color("3f8fc4"))
+	height_score_label.add_theme_constant_override("outline_size", 6)
+	# Sky Climb's height and level sit top-right (the leaderboard spot is only used in Coin Run).
+	height_score_label.anchor_left = 1.0
+	height_score_label.anchor_right = 1.0
+	height_score_label.offset_left = -200.0
+	height_score_label.offset_right = -20.0
+	height_score_label.offset_top = 22.0
+	height_score_label.offset_bottom = 74.0
+	CuteStyle.pill_label(level_label, Color(CuteStyle.HOT_PINK, 0.95), CuteStyle.WHITE)
+	level_label.add_theme_font_size_override("font_size", 19)
+	level_label.anchor_left = 1.0
+	level_label.anchor_right = 1.0
+	level_label.offset_left = -170.0
+	level_label.offset_right = -50.0
+	level_label.offset_top = 82.0
+	level_label.offset_bottom = 116.0
+	CuteStyle.pill_label(tag_status_label, Color(CuteStyle.PEACH, 0.95), CuteStyle.INK)
+	CuteStyle.style_label(power_message, CuteStyle.HOT_PINK, 36, CuteStyle.WHITE, 10)
+	CuteStyle.round_panel(leaderboard_panel, Color(CuteStyle.WHITE, 0.82), Color(CuteStyle.PINK, 0.9), 3, 24)
+	CuteStyle.style_label(leaderboard_label, CuteStyle.INK, 20)
+
+	# Gameplay touches: a pink licorice rope with rounded ends.
+	swing_rope.default_color = Color("ff7fbf")
+	swing_rope.width = 7.0
+	swing_rope.begin_cap_mode = Line2D.LINE_CAP_ROUND
+	swing_rope.end_cap_mode = Line2D.LINE_CAP_ROUND
+
+	# Main menu: keep the illustrated background, swap in gummy buttons.
+	CuteStyle.style_button(start_button, CuteStyle.MINT)
+	CuteStyle.style_button(climb_button, CuteStyle.SKY)
+	CuteStyle.style_button(tag_button, CuteStyle.PEACH)
+	CuteStyle.style_button(shop_button, CuteStyle.HOT_PINK)
+	menu_wallet_label.show()
+	menu_wallet_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	CuteStyle.pill_label(menu_wallet_label, Color(CuteStyle.BUTTER, 0.95), CuteStyle.INK)
+	menu_wallet_label.add_theme_font_size_override("font_size", 22)
+	menu_wallet_label.position = Vector2(230.0, 1205.0)
+	menu_wallet_label.size = Vector2(260.0, 44.0)
+
+	# Game over: soft pink veil with a rounded cream card.
+	game_over_screen.color = Color(CuteStyle.PINK.lerp(CuteStyle.LAVENDER, 0.5), 0.55)
+	game_over_card = Panel.new()
+	game_over_card.name = "CuteCard"
+	game_over_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	game_over_card.position = Vector2(70.0, 190.0)
+	game_over_card.size = Vector2(580.0, 560.0)
+	game_over_card.add_theme_stylebox_override("panel", CuteStyle.box(CuteStyle.CREAM, 44, CuteStyle.WHITE, 6, 0.3))
+	game_over_screen.add_child(game_over_card)
+	game_over_screen.move_child(game_over_card, 0)
+	var game_over_title := game_over_screen.get_node("GameOver") as Label
+	game_over_title.text = "OOPSIE!"
+	CuteStyle.style_label(game_over_title, CuteStyle.HOT_PINK, 58, CuteStyle.WHITE, 10)
+	CuteStyle.style_label(game_over_best_label, CuteStyle.INK, 28)
+	CuteStyle.style_label(game_over_run_label, CuteStyle.INK_SOFT, 21)
+	continue_button = Button.new()
+	continue_button.name = "ContinueButton"
+	continue_button.text = "CONTINUE  (WATCH AD)"
+	continue_button.position = Vector2(150.0, 432.0)
+	continue_button.size = Vector2(420.0, 84.0)
+	continue_button.add_theme_font_size_override("font_size", 26)
+	CuteStyle.style_button(continue_button, CuteStyle.BUTTER, CuteStyle.INK)
+	continue_button.pressed.connect(_on_continue_pressed)
+	game_over_screen.add_child(continue_button)
+	restart_button.position = Vector2(190.0, 536.0)
+	restart_button.size = Vector2(340.0, 80.0)
+	main_menu_button.position = Vector2(230.0, 636.0)
+	main_menu_button.size = Vector2(260.0, 66.0)
+	CuteStyle.style_button(restart_button, CuteStyle.MINT)
+	CuteStyle.style_button(main_menu_button, CuteStyle.LAVENDER)
+
+	# Shop / collection.
+	CuteStyle.gradient_backdrop(shop_screen, Color("ffd9ee"), Color("d6ecff"))
+	var shop_title := shop_screen.get_node("Title") as Label
+	CuteStyle.style_label(shop_title, CuteStyle.HOT_PINK, 56, CuteStyle.WHITE, 12)
+	CuteStyle.style_label(shop_wallet_label, CuteStyle.INK, 26)
+	CuteStyle.style_tab(chest_tab_button, CuteStyle.PEACH)
+	CuteStyle.style_tab(jelly_tab_button, CuteStyle.LAVENDER)
+	CuteStyle.style_tab(coins_tab_button, CuteStyle.MINT)
+	CuteStyle.style_button(shop_back_button, CuteStyle.LAVENDER)
+	CuteStyle.style_button(common_chest_button, CuteStyle.HOT_PINK)
+	CuteStyle.round_panel(chest_card, CuteStyle.CREAM, CuteStyle.WHITE, 5, 40)
+	CuteStyle.round_panel(chest_carousel_backdrop, Color("f3e8ff"), Color(CuteStyle.LAVENDER, 0.8), 3, 22)
+	CuteStyle.style_label(chest_heading, CuteStyle.HOT_PINK, 32)
+	CuteStyle.style_label(chest_description, CuteStyle.INK_SOFT, 19)
+	CuteStyle.style_label(chest_result_label, CuteStyle.INK, 18)
+	CuteStyle.style_label(future_chest_row.get_node("Title") as Label, CuteStyle.INK, 18)
+	for tier_label_name in ["CommonLabel", "UncommonLabel", "RareLabel", "EpicLabel", "LegendaryLabel"]:
+		CuteStyle.style_label(future_chest_row.get_node(tier_label_name) as Label, CuteStyle.INK_SOFT, 14)
+	for chest_picker in [common_chest_picker, uncommon_chest_button, rare_chest_picker, epic_chest_picker, legendary_chest_picker]:
+		CuteStyle.add_squish(chest_picker)
+	CuteStyle.round_panel(ad_panel, CuteStyle.CREAM, CuteStyle.WHITE, 5, 40)
+	var ad_title := ad_panel.get_node("Title") as Label
+	CuteStyle.style_label(ad_title, CuteStyle.HOT_PINK, 40)
+	var ad_description := ad_panel.get_node("Description") as Label
+	ad_description.text = "Watch a short ad\nfor free coins!"
+	CuteStyle.style_label(ad_description, CuteStyle.INK_SOFT, 24)
+	CuteStyle.style_button(ad_reward_button, CuteStyle.BUTTER, CuteStyle.INK)
+	CuteStyle.style_label(ad_status_label, CuteStyle.INK_SOFT, 18)
+	ad_status_label.text = "Placeholder ad (no ad network yet)"
 
 
 
@@ -769,6 +910,10 @@ func _physics_process(delta: float) -> void:
 		return
 
 	jump_cooldown_remaining = max(jump_cooldown_remaining - delta, 0.0)
+	if revive_shield_time > 0.0:
+		revive_shield_time = maxf(revive_shield_time - delta, 0.0)
+		# Blink while protected so the player can see the shield running out.
+		block.modulate.a = 0.45 + 0.55 * absf(sin(world_elapsed * 14.0)) if revive_shield_time > 0.0 else 1.0
 
 	if magnet_time > 0.0:
 
@@ -849,7 +994,11 @@ func _physics_process(delta: float) -> void:
 		return
 
 	# The floor is lava on level one and a bottomless void on later levels.
-	if block_bottom >= floor_top and velocity.y >= 0.0:
+	if block_bottom >= floor_top and velocity.y >= 0.0 and revive_shield_time > 0.0:
+		# A freshly revived Jelly gets a free bounce instead of an instant second death.
+		block.position.y = floor_top - block.size.y - 2.0
+		velocity.y = -1300.0
+	elif block_bottom >= floor_top and velocity.y >= 0.0:
 
 		end_game()
 
@@ -1142,24 +1291,24 @@ func configure_climb_level() -> void:
 
 	match (climb_level - 1) % 5:
 		0:
-			sky_top_color = Color("4bb5f2")
-			sky_bottom_color = Color("dff8ff")
+			sky_top_color = Color("9ad7ff")
+			sky_bottom_color = Color("ffe4f2")
 		1:
-			sky_top_color = Color("8454e8")
-			sky_bottom_color = Color("f5b7ff")
+			sky_top_color = Color("b9a2ff")
+			sky_bottom_color = Color("ffd6f3")
 		2:
-			sky_top_color = Color("153c88")
-			sky_bottom_color = Color("55c5d7")
+			sky_top_color = Color("6f8fe8")
+			sky_bottom_color = Color("a8ecef")
 		3:
-			sky_top_color = Color("d85a80")
-			sky_bottom_color = Color("ffc777")
+			sky_top_color = Color("ff9fc0")
+			sky_bottom_color = Color("ffe1a8")
 		_:
-			sky_top_color = Color("155e72")
-			sky_bottom_color = Color("8ce3bd")
+			sky_top_color = Color("6cc8c9")
+			sky_bottom_color = Color("d2f7dd")
 
 	# Level one has a visible lava floor. Later levels fall into a dark void,
 	# while retaining the same fail boundary for the physics.
-	floor_rect.color = Color("e64018") if climb_level == 1 else Color("09051c")
+	floor_rect.color = LAVA_JAM_COLOR if climb_level == 1 else Color("4a2d6b")
 	level_label.text = "LEVEL %d" % climb_level
 
 
@@ -1167,7 +1316,7 @@ func configure_standard_world() -> void:
 	floor_y = 9000.0
 	floor_rect.position = Vector2(0.0, floor_y)
 	floor_rect.size = Vector2(map_width, 120.0)
-	floor_rect.color = Color("e64018")
+	floor_rect.color = LAVA_JAM_COLOR
 	sky_top_color = Color("4bb5f2")
 	sky_bottom_color = Color("dff8ff")
 
@@ -2245,7 +2394,7 @@ func update_bats(delta: float) -> void:
 
 			bat.scale.x = abs(bat.scale.x) * sign(hunt_direction.x) if hunt_direction.x != 0.0 else bat.scale.x
 
-			if has_player_contact(bat.global_position, bat_attack_radius):
+			if has_player_contact(bat.global_position, bat_attack_radius) and revive_shield_time <= 0.0:
 
 				end_game()
 
@@ -2308,6 +2457,8 @@ func bot_has_active_knife_near(world_position: Vector2) -> bool:
 
 func end_game() -> void:
 
+	if game_over:
+		return
 	game_over = true
 
 	velocity = Vector2.ZERO
@@ -2330,8 +2481,41 @@ func end_game() -> void:
 
 		straighten_tween.kill()
 
-	play_sfx(game_over_sound_player)
+	# A won Tag round goes straight to results; every other end gets a lucky spin.
+	if active_game_mode == "TAG" and tag_round_won:
+		finalize_game_over()
+	else:
+		show_death_wheel()
 
+
+
+
+
+func show_death_wheel() -> void:
+	var wheel := PrizeWheel.new(active_game_mode != "TAG")
+	wheel.finished.connect(_on_death_wheel_finished)
+	add_child(wheel)
+
+
+
+
+
+func _on_death_wheel_finished(coins: int, revive: bool) -> void:
+	wallet_coins += coins
+	save_profile()
+	update_coin_counter()
+	play_sfx(collect_sound_player)
+	if revive:
+		revive_player()
+	else:
+		finalize_game_over()
+
+
+
+
+
+func finalize_game_over() -> void:
+	play_sfx(game_over_sound_player)
 	if active_game_mode == "COIN" and coins_collected > coin_high_score:
 
 		coin_high_score = coins_collected
@@ -2350,9 +2534,77 @@ func end_game() -> void:
 
 	game_over_screen.show()
 
-	game_over_run_label.text = "Run: %d coins  â€¢  %d bats" % [coins_collected, bat_kills] if active_game_mode == "COIN" else "Run: %dm high  â€¢  %d coins  â€¢  %d bats" % [height_score, coins_collected, bat_kills]
+	game_over_run_label.text = "Run: %d coins  •  %d bats" % [coins_collected, bat_kills] if active_game_mode == "COIN" else "Run: %dm high  •  %d coins  •  %d bats" % [height_score, coins_collected, bat_kills]
 
 	save_profile()
+	continue_button.visible = not continue_used_this_run and active_game_mode != "TAG" and not tag_round_won
+	CuteStyle.pop_in(game_over_card)
+	game_overs_since_ad += 1
+	if game_overs_since_ad >= INTERSTITIAL_EVERY_GAME_OVERS:
+		game_overs_since_ad = 0
+		show_placeholder_ad(Callable())
+
+
+
+
+
+func show_placeholder_ad(on_closed: Callable) -> void:
+	# Real ads silence game audio, so the placeholder does too.
+	var master_bus := AudioServer.get_bus_index("Master")
+	AudioServer.set_bus_mute(master_bus, true)
+	var ad := PlaceholderAd.new(5.0)
+	ad.closed.connect(func() -> void:
+		AudioServer.set_bus_mute(master_bus, false)
+		if on_closed.is_valid():
+			on_closed.call()
+	)
+	add_child(ad)
+
+
+
+
+
+func _on_continue_pressed() -> void:
+	if continue_used_this_run:
+		return
+	continue_used_this_run = true
+	continue_button.hide()
+	show_placeholder_ad(revive_player)
+
+
+
+
+
+func revive_player() -> void:
+	# Put Jelly back in the air above where the run ended, calm nearby bats,
+	# and grant a few seconds of protection.
+	game_over_screen.hide()
+	var center := get_player_center()
+	var min_y := CLIMB_LEVEL_TOP_Y + 420.0 if active_game_mode == "CLIMB" else 300.0
+	var revive_center := Vector2(
+		clampf(center.x, 180.0, map_width - 180.0),
+		clampf(minf(center.y - 420.0, floor_y - 650.0), min_y, floor_y - 650.0)
+	)
+	block.position = revive_center - block.size / 2.0
+	_finish_jump_visual_reset()
+	velocity = Vector2(0.0, -700.0)
+	is_swinging = false
+	swing_anchor = null
+	swing_rope.hide()
+	is_pointer_held = false
+	swing_attempted = false
+	for bat_node in bats.get_children():
+		var bat := bat_node as Sprite2D
+		if bat:
+			bat.set_meta("chasing", false)
+			bat.set_meta("chase_started_at", -1.0)
+			bat.set_meta("ignore_until", world_elapsed + REVIVE_SHIELD_SECONDS + 1.0)
+	previous_player_center = get_player_center()
+	revive_shield_time = REVIVE_SHIELD_SECONDS
+	game_over = false
+	show_power_message("REVIVED!")
+	if not background_music_player.playing:
+		background_music_player.play()
 
 
 
@@ -2410,6 +2662,12 @@ func start_game() -> void:
 func restart_game() -> void:
 
 	game_over = false
+
+	continue_used_this_run = false
+
+	revive_shield_time = 0.0
+
+	block.modulate.a = 1.0
 
 	velocity = Vector2.ZERO
 
@@ -2830,7 +3088,7 @@ func update_high_score_label() -> void:
 
 		game_over_best_label.text = "Best Coins: %d" % coin_high_score
 
-	menu_best_label.text = "COIN BEST: %d   â€¢   CLIMB BEST: %dm" % [coin_high_score, climb_high_score]
+	menu_best_label.text = "COIN BEST: %d   •   CLIMB BEST: %dm" % [coin_high_score, climb_high_score]
 
 
 
@@ -2907,10 +3165,21 @@ func build_skin_shop() -> void:
 		skin_button.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
 
 		var owned := unlocked_skins.has(skin_id)
+		# Rounded card tinted by rarity, drawn behind the Jelly artwork.
+		var tier_colors := {"Common": CuteStyle.MINT, "Uncommon": CuteStyle.SKY, "Rare": CuteStyle.LAVENDER, "Epic": CuteStyle.PINK, "Legendary": CuteStyle.BUTTER}
+		var tier_color: Color = tier_colors.get(str(skin.get("tier", "Common")), CuteStyle.MINT)
+		var card := Panel.new()
+		card.show_behind_parent = true
+		card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		card.position = Vector2(6.0, 4.0)
+		card.size = skin_button.custom_minimum_size - Vector2(12.0, 8.0)
+		card.add_theme_stylebox_override("panel", CuteStyle.box(Color(tier_color, 0.35 if owned else 0.18), 26, Color(tier_color, 0.9 if owned else 0.45), 3))
+		skin_button.add_child(card)
+		CuteStyle.add_squish(skin_button)
 
 		if skin_id == selected_skin:
 
-			skin_button.tooltip_text = "%s â€” EQUIPPED" % str(skin["name"])
+			skin_button.tooltip_text = "%s — EQUIPPED" % str(skin["name"])
 
 			var equipped_outline := StyleBoxFlat.new()
 
@@ -2924,7 +3193,7 @@ func build_skin_shop() -> void:
 
 			equipped_outline.border_width_bottom = 4
 
-			equipped_outline.border_color = Color.WHITE
+			equipped_outline.border_color = CuteStyle.HOT_PINK
 
 			equipped_outline.corner_radius_top_left = 14
 
@@ -2934,7 +3203,7 @@ func build_skin_shop() -> void:
 
 			equipped_outline.corner_radius_bottom_left = 14
 
-			equipped_outline.shadow_color = Color(1.0, 1.0, 1.0, 0.82)
+			equipped_outline.shadow_color = Color(CuteStyle.HOT_PINK, 0.45)
 
 			equipped_outline.shadow_size = 9
 
@@ -2952,13 +3221,13 @@ func build_skin_shop() -> void:
 
 		elif owned:
 
-			skin_button.tooltip_text = "%s â€” OWNED" % str(skin["name"])
+			skin_button.tooltip_text = "%s — OWNED" % str(skin["name"])
 
 		else:
 
-			skin_button.modulate = Color(0.28, 0.28, 0.32, 1.0)
+			skin_button.self_modulate = Color(0.42, 0.34, 0.55, 0.75)
 
-			skin_button.tooltip_text = "%s â€” LOCKED" % str(skin["name"])
+			skin_button.tooltip_text = "%s — LOCKED" % str(skin["name"])
 
 		skin_button.pressed.connect(_on_skin_button_pressed.bind(skin_id))
 
@@ -2992,7 +3261,7 @@ func buy_or_equip_skin(skin_id: int) -> void:
 
 	if not unlocked_skins.has(skin_id):
 
-		chest_result_label.text = "LOCKED â€” OPEN A CHEST TO UNLOCK"
+		chest_result_label.text = "LOCKED — OPEN A CHEST TO UNLOCK"
 
 		return
 
@@ -3058,7 +3327,7 @@ func refresh_chest_selection_ui() -> void:
 
 	chest_description.text = str(chest_data["description"])
 
-	common_chest_button.text = "OPEN %s CHEST â€” %d COINS" % [selected_chest_tier, int(chest_data["cost"])] if is_available else "%s CHEST â€” COMING SOON" % selected_chest_tier
+	common_chest_button.text = "OPEN %s CHEST — %d COINS" % [selected_chest_tier, int(chest_data["cost"])] if is_available else "%s CHEST — COMING SOON" % selected_chest_tier
 
 	common_chest_button.disabled = chest_rolling or not is_available
 
@@ -3099,16 +3368,18 @@ func open_selected_chest() -> void:
 
 
 func claim_test_ad_reward() -> void:
-
-	wallet_coins += 10
-
-	ad_status_label.text = "+10 COINS ADDED â€” TEST MODE"
-
-	save_profile()
-
-	update_coin_counter()
-
-	build_skin_shop()
+	# Rewarded placeholder: coins are only granted after the ad is closed.
+	if ad_reward_button.disabled:
+		return
+	ad_reward_button.disabled = true
+	show_placeholder_ad(func() -> void:
+		ad_reward_button.disabled = false
+		wallet_coins += 10
+		ad_status_label.text = "+10 COINS ADDED!"
+		save_profile()
+		update_coin_counter()
+		build_skin_shop()
+	)
 
 
 
@@ -3220,7 +3491,7 @@ func prepare_chest_carousel(reward_pool: Array[int], final_skin_id: int = -1) ->
 
 		carousel_item.texture_normal = create_skin_texture(reward_id)
 
-		# Fixed 58 Ã— 64 cards keep every Jelly inside the case-opening strip.
+		# Fixed 58 × 64 cards keep every Jelly inside the case-opening strip.
 
 		carousel_item.position = Vector2(item_index * item_spacing, 33.0)
 
@@ -3778,13 +4049,14 @@ func _draw() -> void:
 
 
 
-	# A soft red world rim makes the ceiling and side walls easy to recognize.
+	draw_sky_decorations(visible_bounds)
+	# A soft candy rim makes the ceiling and side walls easy to recognize.
 
 	var map_border := Rect2(0.0, 0.0, map_width, floor_y)
 
-	draw_rect(map_border, Color(1.0, 0.12, 0.18, 0.22), false, 28.0, true)
+	draw_rect(map_border, Color(1.0, 0.55, 0.78, 0.25), false, 28.0, true)
 
-	draw_rect(map_border, Color(1.0, 0.4, 0.38, 0.9), false, 7.0, true)
+	draw_rect(map_border, Color(1.0, 0.62, 0.82, 0.95), false, 8.0, true)
 
 
 
@@ -3794,46 +4066,19 @@ func _draw() -> void:
 
 		if expanded_bounds.has_point(coin_position):
 
-			draw_circle(coin_position, 15.0, Color("e5a900"))
-
-			draw_circle(coin_position, 11.0, Color("ffdf3c"))
-
-			draw_arc(coin_position, 8.0, 0.0, TAU, 20, Color("fff4a3"), 2.0, true)
-
+			draw_cute_coin(coin_position, 15.0)
 	for big_coin_position in big_coin_positions:
 
 		if expanded_bounds.has_point(big_coin_position):
 
-			draw_circle(big_coin_position, 30.0, Color("bd6900"))
-
-			draw_circle(big_coin_position, 25.0, Color("ffb000"))
-
-			draw_circle(big_coin_position, 19.0, Color("ffe261"))
-
-			draw_arc(big_coin_position, 15.0, 0.0, TAU, 20, Color("fff7bc"), 3.0, true)
-
-
-
+			draw_cute_coin(big_coin_position, 30.0)
 	# Neon spring pads are drawn in-world rather than as dozens of extra nodes.
 
 	for pad_position in bounce_pad_positions:
 
 		if expanded_bounds.has_point(pad_position):
 
-			var pad_rect := Rect2(pad_position - bounce_pad_size * 0.5, bounce_pad_size)
-
-			var pad_pulse := 0.88 + sin(world_elapsed * 5.0 + pad_position.x * 0.01) * 0.12
-
-			draw_rect(pad_rect.grow(4.0), Color(0.25, 1.0, 0.9, 0.20 * pad_pulse), true)
-
-			draw_rect(pad_rect, Color("20d9c7"), true)
-
-			draw_rect(pad_rect, Color("e9fff8"), false, 3.0, true)
-
-			draw_line(pad_rect.position + Vector2(12.0, 6.0), pad_rect.end - Vector2(12.0, 6.0), Color("08796f"), 3.0, true)
-
-
-
+			draw_cute_pad(pad_position)
 	# Bright rolling embers make level one's lava readable. Later Sky Climb
 	# floors are deliberately quiet voids instead.
 	if visible_bounds.end.y >= floor_y - 70.0 and not (active_game_mode == "CLIMB" and climb_level > 1):
@@ -3846,7 +4091,8 @@ func _draw() -> void:
 
 			var ember_y := floor_y - 7.0 + sin(world_elapsed * 3.0 + float(ember_x) * 0.08) * 8.0
 
-			draw_circle(Vector2(float(ember_x), ember_y), 11.0, Color("ffb11f"))
+			draw_circle(Vector2(float(ember_x), ember_y), 11.0, Color("ffd0e0"))
+			draw_circle(Vector2(float(ember_x) - 3.0, ember_y - 3.0), 3.5, Color(1.0, 1.0, 1.0, 0.8))
 
 
 
@@ -3860,7 +4106,96 @@ func _draw() -> void:
 
 			var bot_anchor_position: Vector2 = bot.get_meta("from_anchor")
 
-			draw_line(bot_anchor_position, bot.global_position, Color(0.24, 0.12, 0.39, 0.72), 3.0, true)
+			draw_line(bot_anchor_position, bot.global_position, Color(0.72, 0.55, 0.95, 0.8), 3.0, true)
+
+
+
+
+
+func draw_sky_decorations(visible_bounds: Rect2) -> void:
+	# Fluffy clouds and twinkling sparkles, placed by hashing fixed grid cells so
+	# they never pop around and only the cells on screen cost anything.
+	var cell := Vector2(460.0, 380.0)
+	var first := Vector2i(floori(visible_bounds.position.x / cell.x) - 1, floori(visible_bounds.position.y / cell.y) - 1)
+	var last := Vector2i(floori(visible_bounds.end.x / cell.x) + 1, floori(visible_bounds.end.y / cell.y) + 1)
+	for cell_y in range(first.y, last.y + 1):
+		for cell_x in range(first.x, last.x + 1):
+			var seed_value := absi(cell_x * 73856093 ^ cell_y * 19349663)
+			var base := Vector2(cell_x, cell_y) * cell + Vector2(float(seed_value % 300), float((seed_value / 7) % 260))
+			if seed_value % 3 != 0:
+				var drift := sin(world_elapsed * 0.25 + float(seed_value % 17)) * 26.0
+				var cloud_scale := 0.75 + float(seed_value % 5) * 0.12
+				draw_cute_cloud(base + Vector2(drift, 0.0), cloud_scale)
+			var sparkle_pos := base + Vector2(210.0, -120.0)
+			var twinkle := 0.5 + 0.5 * sin(world_elapsed * 3.0 + float(seed_value % 11))
+			draw_sparkle(sparkle_pos, 7.0 + twinkle * 5.0, Color(1.0, 1.0, 1.0, 0.35 + twinkle * 0.5))
+
+
+
+
+
+func draw_cute_cloud(center: Vector2, cloud_scale: float) -> void:
+	var puff := Color(1.0, 1.0, 1.0, 0.72)
+	var shade := Color(1.0, 0.86, 0.95, 0.55)
+	draw_circle(center + Vector2(-58.0, 14.0) * cloud_scale, 40.0 * cloud_scale, shade)
+	draw_circle(center + Vector2(52.0, 16.0) * cloud_scale, 42.0 * cloud_scale, shade)
+	draw_circle(center + Vector2(-50.0, 8.0) * cloud_scale, 40.0 * cloud_scale, puff)
+	draw_circle(center + Vector2(0.0, -14.0) * cloud_scale, 54.0 * cloud_scale, puff)
+	draw_circle(center + Vector2(56.0, 8.0) * cloud_scale, 40.0 * cloud_scale, puff)
+	draw_rect(Rect2(center + Vector2(-58.0, 8.0) * cloud_scale, Vector2(116.0, 40.0) * cloud_scale), puff)
+
+
+
+
+
+func draw_sparkle(center: Vector2, size: float, color: Color) -> void:
+	var points := PackedVector2Array([
+		center + Vector2(0.0, -size), center + Vector2(size * 0.22, -size * 0.22),
+		center + Vector2(size, 0.0), center + Vector2(size * 0.22, size * 0.22),
+		center + Vector2(0.0, size), center + Vector2(-size * 0.22, size * 0.22),
+		center + Vector2(-size, 0.0), center + Vector2(-size * 0.22, -size * 0.22),
+	])
+	draw_colored_polygon(points, color)
+
+
+
+
+
+func draw_cute_coin(center: Vector2, radius: float) -> void:
+	# Gentle bob and a glossy highlight so coins look like candy buttons.
+	var bob := Vector2(0.0, sin(world_elapsed * 3.0 + center.x * 0.02) * radius * 0.12)
+	var c := center + bob
+	draw_circle(c + Vector2(0.0, radius * 0.12), radius, Color(0.85, 0.5, 0.2, 0.25))
+	draw_circle(c, radius, Color("f2a93b"))
+	draw_circle(c, radius * 0.8, Color("ffd45c"))
+	draw_arc(c, radius * 0.55, 0.0, TAU, 20, Color("fff1a8"), maxf(2.0, radius * 0.1), true)
+	draw_circle(c + Vector2(-radius * 0.35, -radius * 0.38), radius * 0.2, Color(1.0, 1.0, 1.0, 0.85))
+
+
+
+
+
+func draw_cute_pad(pad_position: Vector2) -> void:
+	# Marshmallow bounce pad: a squishy capsule with a little face.
+	var pad_rect := Rect2(pad_position - bounce_pad_size * 0.5, bounce_pad_size)
+	var squish := 1.0 + sin(world_elapsed * 5.0 + pad_position.x * 0.01) * 0.04
+	var half_h := pad_rect.size.y * 0.5 * squish
+	var radius := maxf(half_h, 6.0)
+	var left := Vector2(pad_rect.position.x + radius, pad_position.y)
+	var right := Vector2(pad_rect.end.x - radius, pad_position.y)
+	var outline := Color("ffffff")
+	var body := Color("ff9fd0")
+	draw_circle(left, radius + 3.0, outline)
+	draw_circle(right, radius + 3.0, outline)
+	draw_rect(Rect2(left - Vector2(0.0, radius + 3.0), Vector2(right.x - left.x, (radius + 3.0) * 2.0)), outline)
+	draw_circle(left, radius, body)
+	draw_circle(right, radius, body)
+	draw_rect(Rect2(left - Vector2(0.0, radius), Vector2(right.x - left.x, radius * 2.0)), body)
+	draw_line(left + Vector2(2.0, -radius * 0.45), right + Vector2(-2.0, -radius * 0.45), Color(1.0, 1.0, 1.0, 0.7), 3.0, true)
+	var face := pad_position + Vector2(0.0, radius * 0.1)
+	draw_circle(face + Vector2(-10.0, -1.0), 2.6, CuteStyle.INK)
+	draw_circle(face + Vector2(10.0, -1.0), 2.6, CuteStyle.INK)
+	draw_arc(face + Vector2(0.0, 1.0), 4.5, 0.2, PI - 0.2, 8, CuteStyle.INK, 2.0, true)
 
 
 
