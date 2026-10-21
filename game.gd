@@ -18,16 +18,23 @@ const KNIFE_TEXTURE := preload("res://images/knife_powerup.png")
 
 const COMMON_CHEST_TEXTURE := preload("res://images/common_chest.png")
 const UNCOMMON_CHEST_TEXTURE := preload("res://images/uncommon_chest.png")
-const BACKGROUND_MUSIC := preload("res://sounds/backround1.mp3")
-const BACKGROUND_MUSIC_ALT := preload("res://sounds/backround2.mp3")
-const JUMP_SOUND := preload("res://sounds/bestuploadsever67aryan-jump-sound-531048.mp3")
-const BOUNCE_SOUND := preload("res://sounds/freesound_community-jump-climb-or-damage-sound-f-95942.mp3")
-const SWOOSH_SOUND := preload("res://sounds/alexzavesa-swoosh-1-463607.mp3")
-const ACTION_SOUND := preload("res://sounds/freesound_gamestudio-rpg-sword-attack-combo-28-388957.mp3")
-const GAME_OVER_SOUND := preload("res://sounds/universfield-game-over-deep-male-voice-clip-352695.mp3")
-const JETPACK_SOUND := preload("res://sounds/freesound_community-good-jetpack-sound-loop-96693.mp3")
-const COLLECT_SOUND := preload("res://sounds/liecio-collect-points-190037.mp3")
+# Audio sources and licences: sounds/CREDITS.md
+const BACKGROUND_MUSIC := preload("res://sounds/music_1.mp3")
+const BACKGROUND_MUSIC_ALT := preload("res://sounds/music_2.mp3")
+const JUMP_SOUND := preload("res://sounds/jump.mp3")
+const BOUNCE_SOUND := preload("res://sounds/bounce.mp3")
+const SWOOSH_SOUND := preload("res://sounds/swing.mp3")
+const ACTION_SOUND := preload("res://sounds/bat_defeat.mp3")
+const GAME_OVER_SOUND := preload("res://sounds/game_over.mp3")
+const JETPACK_SOUND := preload("res://sounds/powerup.mp3")
+const COLLECT_SOUND := preload("res://sounds/coin.mp3")
+const WHEEL_SPIN_SOUND := preload("res://sounds/wheel_spin.mp3")
+const SUCCESS_SOUND := preload("res://sounds/success.mp3")
+const REVIVE_SOUND := preload("res://sounds/revive.mp3")
+const BUTTON_SOUND := preload("res://sounds/button.mp3")
 const SCORE_SAVE_PATH := "user://gravity_tax_scores.cfg"
+# Tests point this at a throwaway file so they never touch a real save.
+var save_path := SCORE_SAVE_PATH
 const MMCQ_LAB_LOGO := preload("res://images/mmcq_lab_logo.png")
 
 
@@ -288,13 +295,13 @@ var skin_definitions: Array[Dictionary] = [
 
 	{"name": "Boba Jelly", "tier": "Rare"},
 
-	{"name": "Straw Hat Jelly", "tier": "Epic"},
+	{"name": "Sun Hat Jelly", "tier": "Epic"},
 
 	{"name": "Cash Stack Jelly", "tier": "Epic"},
 
-	{"name": "Web Hero Jelly", "tier": "Epic"},
+	{"name": "Masked Hero Jelly", "tier": "Epic"},
 
-	{"name": "Pixel Crawler Jelly", "tier": "Epic"},
+	{"name": "Pixel Block Jelly", "tier": "Epic"},
 
 	{"name": "Galaxy Jelly", "tier": "Epic"},
 
@@ -413,6 +420,25 @@ const REVIVE_SHIELD_SECONDS := 3.0
 var revive_shield_time := 0.0
 var continue_used_this_run := false
 var game_overs_since_ad := 0
+var ad_audio_muted := false
+
+# Gameplay sprites were authored at 1254px but are drawn at 30-100px. They are
+# imported at a reduced size to save memory, so scales are derived from the
+# imported width to keep the on-screen size identical.
+const ART_DESIGN_WIDTH := 1254.0
+var orb_scale := 0.025
+var bat_scale := 0.075
+var power_up_scale := 0.052
+# Player settings (saved with the profile).
+const SAVE_VERSION := 2
+var music_volume := 0.8
+var sfx_volume := 0.9
+var audio_muted := false
+var settings_panel: SettingsPanel
+var pause_button: Button
+var settings_button: Button
+var safe_area_top := 0.0
+var safe_area_bottom := 0.0
 var continue_button: Button
 var game_over_card: Panel
 
@@ -459,9 +485,10 @@ var game_over_sound_player: AudioStreamPlayer
 var jetpack_sound_player: AudioStreamPlayer
 
 var collect_sound_player: AudioStreamPlayer
-
-
-
+var wheel_spin_sound_player: AudioStreamPlayer
+var success_sound_player: AudioStreamPlayer
+var revive_sound_player: AudioStreamPlayer
+var button_sound_player: AudioStreamPlayer
 # Movement settings
 
 var gravity: float = 500.0
@@ -524,7 +551,9 @@ var studio_intro_played := false
 
 
 func _ready() -> void:
-
+	orb_scale = art_scale(PURPLE_ORB_TEXTURE, 0.025)
+	bat_scale = art_scale(BAT_TEXTURE, 0.075)
+	power_up_scale = art_scale(ROCKET_TEXTURE, 0.052)
 	randomize()
 
 
@@ -637,7 +666,10 @@ func _ready() -> void:
 
 	select_chest("COMMON")
 	apply_cute_ui()
-
+	build_pause_and_settings()
+	apply_wide_layout()
+	apply_safe_area()
+	apply_audio_settings()
 	call_deferred("show_studio_intro")
 
 
@@ -686,6 +718,8 @@ func apply_cute_ui() -> void:
 	level_label.offset_bottom = 116.0
 	CuteStyle.pill_label(tag_status_label, Color(CuteStyle.PEACH, 0.95), CuteStyle.INK)
 	CuteStyle.style_label(power_message, CuteStyle.ACCENT, 36, CuteStyle.WHITE, 10)
+	# Below the leaderboard so pop-up messages never cover it.
+	power_message.position.y = 245.0
 	CuteStyle.round_panel(leaderboard_panel, Color(CuteStyle.WHITE, 0.82), Color(CuteStyle.SKY, 0.9), 3, 24)
 	CuteStyle.style_label(leaderboard_label, CuteStyle.INK, 20)
 
@@ -754,8 +788,11 @@ func apply_cute_ui() -> void:
 	CuteStyle.style_label(chest_description, CuteStyle.INK_SOFT, 19)
 	CuteStyle.style_label(chest_result_label, CuteStyle.INK, 18)
 	CuteStyle.style_label(future_chest_row.get_node("Title") as Label, CuteStyle.INK, 18)
-	for tier_label_name in ["CommonLabel", "UncommonLabel", "RareLabel", "EpicLabel", "LegendaryLabel"]:
-		CuteStyle.style_label(future_chest_row.get_node(tier_label_name) as Label, CuteStyle.INK_SOFT, 14)
+	# Chest labels show each tier's price in its rarity colour.
+	for tier_name in ["COMMON", "UNCOMMON", "RARE", "EPIC", "LEGENDARY"]:
+		var tier_label := future_chest_row.get_node(tier_name.capitalize() + "Label") as Label
+		tier_label.text = "%s • %d" % [tier_name, int(chest_definitions[tier_name]["cost"])]
+		CuteStyle.style_label(tier_label, CuteStyle.rarity_color(tier_name).darkened(0.15), 14)
 	for chest_picker in [common_chest_picker, uncommon_chest_button, rare_chest_picker, epic_chest_picker, legendary_chest_picker]:
 		CuteStyle.add_squish(chest_picker)
 	chest_claim_button = Button.new()
@@ -802,6 +839,182 @@ func apply_cute_ui() -> void:
 
 
 
+func build_pause_and_settings() -> void:
+	settings_panel = SettingsPanel.new()
+	settings_panel.credits_text = build_credits_text()
+	add_child(settings_panel)
+	settings_panel.settings_changed.connect(_on_settings_changed)
+	settings_panel.resume_requested.connect(resume_game)
+	settings_panel.home_requested.connect(func() -> void:
+		get_tree().paused = false
+		return_to_main_menu()
+	)
+
+	# Pause button sits top-centre during a run, clear of the score pills.
+	pause_button = Button.new()
+	pause_button.name = "PauseButton"
+	pause_button.text = "II"
+	pause_button.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	pause_button.offset_left = -36.0
+	pause_button.offset_right = 36.0
+	pause_button.offset_top = 20.0
+	pause_button.offset_bottom = 92.0
+	pause_button.add_theme_font_size_override("font_size", 28)
+	CuteStyle.style_button(pause_button, CuteStyle.ACCENT)
+	pause_button.pressed.connect(pause_game)
+	pause_button.hide()
+	$HUD.add_child(pause_button)
+
+	# Settings gear on the main menu.
+	settings_button = Button.new()
+	settings_button.name = "SettingsButton"
+	settings_button.text = "SETTINGS"
+	settings_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	settings_button.offset_left = -196.0
+	settings_button.offset_right = -20.0
+	settings_button.offset_top = 20.0
+	settings_button.offset_bottom = 82.0
+	settings_button.add_theme_font_size_override("font_size", 20)
+	CuteStyle.style_button(settings_button, CuteStyle.LAVENDER)
+	settings_button.pressed.connect(func() -> void:
+		settings_panel.open(false, music_volume, sfx_volume, audio_muted)
+	)
+	start_screen.add_child(settings_button)
+
+
+
+
+
+func build_credits_text() -> String:
+	var lines: Array[String] = [
+		"JELLY SWING ARCADE",
+		"Made by MMCQ-Lab.",
+		"",
+		"MUSIC & SOUND EFFECTS",
+		"All music and sound effects are from Pixabay, used under the Pixabay Content License (pixabay.com/service/license-summary).",
+		"Music: \"Retro Game\" by the_mountain; \"Retro Arcade Game Music\" by arpmedia.",
+		"Sound effects: \"Jump Sound\" by Bestuploadsever67aryan; \"Simple Whoosh\" by DRAGON-STUDIO; \"8-bit Jump 001\" by EdR; \"Retro coin 3\" by Driken5482; \"power up (Type 1)\" by RibhavAgrawal; \"Hurt sound\" by Stepir44; \"Marimba Game Over\" and \"Computer Mouse Click\" by Universfield; \"Wheel Spin Click Slow Down\" by pooky1, \"Success 1\" by Leszek_Szary and \"AHHHH\" by random_intruder (Freesound community).",
+		"",
+		"ENGINE",
+		"Made with the Godot Engine (godotengine.org).",
+		"",
+		Engine.get_license_text(),
+	]
+	# Third-party components bundled inside the engine.
+	var components := Engine.get_copyright_info()
+	if not components.is_empty():
+		lines.append("")
+		lines.append("THIRD-PARTY COMPONENTS")
+		for component in components:
+			lines.append("%s" % str(component.get("name", "")))
+	return "\n".join(lines)
+
+
+
+
+
+func pause_game() -> void:
+	if not game_started or game_over or get_tree().paused:
+		return
+	is_pointer_held = false
+	write_save()
+	get_tree().paused = true
+	settings_panel.open(true, music_volume, sfx_volume, audio_muted)
+
+
+
+
+
+func resume_game() -> void:
+	settings_panel.close()
+	get_tree().paused = false
+	is_pointer_held = false
+	touch_gesture_active = false
+	last_touch_event_msec = Time.get_ticks_msec()
+
+
+
+
+
+func _notification(what: int) -> void:
+	# Phones can background the app at any moment: save, and pause a live run
+	# so the player returns to a pause menu instead of an instant death.
+	if not is_node_ready():
+		return
+	match what:
+		NOTIFICATION_APPLICATION_PAUSED, NOTIFICATION_APPLICATION_FOCUS_OUT, NOTIFICATION_WM_CLOSE_REQUEST:
+			write_save()
+			pause_game()
+
+
+
+
+
+func apply_wide_layout() -> void:
+	# The UI is laid out for a 720px-wide portrait canvas. On wider screens
+	# (iPad, ~960px canvas) centre the menus and keep right-hand HUD items at
+	# the right edge instead of leaving everything hugging the left.
+	var canvas_size := get_viewport().get_visible_rect().size
+	var extra_width := canvas_size.x - 720.0
+	if extra_width <= 1.0:
+		return
+	var half := extra_width * 0.5
+	var full_rect_names := ["JellySky", "ReadabilityVeil", "CuteGradient", "CuteBackground", "SettingsButton"]
+	for screen in [start_screen, shop_screen, game_over_screen]:
+		for child in screen.get_children():
+			if child is Control and not full_rect_names.has(str(child.name)):
+				(child as Control).position.x += half
+	for right_control in [leaderboard_panel, tag_status_label]:
+		(right_control as Control).position.x += extra_width
+	power_message.position.x += half
+	# Keep the menu art's logo visible: fill the width and crop from the bottom.
+	var menu_art := start_screen.get_node_or_null("JellySky") as TextureRect
+	if menu_art and menu_art.texture:
+		var art_size := menu_art.texture.get_size()
+		var fitted_height := canvas_size.x * art_size.y / art_size.x
+		if fitted_height > canvas_size.y:
+			menu_art.set_anchors_preset(Control.PRESET_TOP_LEFT)
+			menu_art.stretch_mode = TextureRect.STRETCH_SCALE
+			menu_art.position = Vector2.ZERO
+			menu_art.size = Vector2(canvas_size.x, fitted_height)
+
+
+
+
+
+func apply_safe_area() -> void:
+	# Push HUD and screen headers below the notch / Dynamic Island, and lift the
+	# banner above the home indicator. Safe area is reported in screen pixels,
+	# so convert to the 720-wide game canvas.
+	var safe_rect := DisplayServer.get_display_safe_area()
+	var screen_size := DisplayServer.screen_get_size()
+	var canvas_size := get_viewport().get_visible_rect().size
+	if safe_rect.size.y <= 0 or screen_size.y <= 0:
+		return
+	var to_canvas := canvas_size.y / float(screen_size.y)
+	safe_area_top = clampf(float(safe_rect.position.y) * to_canvas, 0.0, 160.0)
+	safe_area_bottom = clampf(float(screen_size.y - safe_rect.end.y) * to_canvas, 0.0, 120.0)
+	if safe_area_top > 0.0:
+		for hud_control in [coin_counter, high_score_label, kill_counter, height_score_label, level_label, tag_status_label, leaderboard_panel, power_message, pause_button]:
+			(hud_control as Control).position.y += safe_area_top
+		for shop_child in shop_screen.get_children():
+			if shop_child is Control and shop_child.name != "CuteGradient":
+				(shop_child as Control).position.y += safe_area_top
+		settings_button.position.y += safe_area_top
+	if banner_ad:
+		banner_ad.set_bottom_inset(safe_area_bottom)
+
+
+
+
+
+func art_scale(texture: Texture2D, design_scale: float) -> float:
+	return design_scale * ART_DESIGN_WIDTH / float(maxi(texture.get_width(), 1))
+
+
+
+
+
 func show_studio_intro() -> void:
 	# One brief studio card appears after the engine has finished booting.
 	if studio_intro_played:
@@ -839,34 +1052,87 @@ func setup_audio() -> void:
 	for music_stream in music_streams:
 		if music_stream is AudioStreamMP3:
 			(music_stream as AudioStreamMP3).loop = true
-	background_music_player = make_audio_player(BACKGROUND_MUSIC, -20.0)
-
+	ensure_audio_buses()
+	# Levels balanced from each file's measured loudness so no effect jumps out;
+	# coins are a touch quieter because they play constantly.
+	background_music_player = make_audio_player(BACKGROUND_MUSIC, -20.0, "Music")
 	jump_sound_player = make_audio_player(JUMP_SOUND, -8.0)
+	bounce_sound_player = make_audio_player(BOUNCE_SOUND, -20.0)
+	swoosh_sound_player = make_audio_player(SWOOSH_SOUND, -7.0)
+	action_sound_player = make_audio_player(ACTION_SOUND, -9.0)
+	game_over_sound_player = make_audio_player(GAME_OVER_SOUND, -1.0)
+	jetpack_sound_player = make_audio_player(JETPACK_SOUND, -7.0)
+	collect_sound_player = make_audio_player(COLLECT_SOUND, -15.0)
+	wheel_spin_sound_player = make_audio_player(WHEEL_SPIN_SOUND, 0.0)
+	success_sound_player = make_audio_player(SUCCESS_SOUND, -2.0)
+	revive_sound_player = make_audio_player(REVIVE_SOUND, -8.0)
+	button_sound_player = make_audio_player(BUTTON_SOUND, 10.0)
+	# Menu clicks must still sound while the game is paused.
+	button_sound_player.process_mode = Node.PROCESS_MODE_ALWAYS
+	# Every button in the game, including ones created later, gets a tap sound.
+	get_tree().node_added.connect(_on_node_added_for_button_sound)
+	for existing_button in find_children("*", "BaseButton", true, false):
+		_on_node_added_for_button_sound(existing_button)
 
-	bounce_sound_player = make_audio_player(BOUNCE_SOUND, -6.0)
-
-	swoosh_sound_player = make_audio_player(SWOOSH_SOUND, -10.0)
-
-	action_sound_player = make_audio_player(ACTION_SOUND, -10.0)
-
-	game_over_sound_player = make_audio_player(GAME_OVER_SOUND, -4.0)
-
-	jetpack_sound_player = make_audio_player(JETPACK_SOUND, -10.0)
-
-	collect_sound_player = make_audio_player(COLLECT_SOUND, -12.0)
 
 
 
 
+func ensure_audio_buses() -> void:
+	# Separate Music and SFX buses so each has its own volume slider.
+	for bus_name in ["Music", "SFX"]:
+		if AudioServer.get_bus_index(bus_name) == -1:
+			AudioServer.add_bus()
+			var bus_index := AudioServer.bus_count - 1
+			AudioServer.set_bus_name(bus_index, bus_name)
+			AudioServer.set_bus_send(bus_index, "Master")
 
-func make_audio_player(stream: AudioStream, volume_db: float) -> AudioStreamPlayer:
 
+
+
+
+func apply_audio_settings() -> void:
+	var music_bus := AudioServer.get_bus_index("Music")
+	var sfx_bus := AudioServer.get_bus_index("SFX")
+	if music_bus >= 0:
+		AudioServer.set_bus_volume_db(music_bus, linear_to_db(maxf(music_volume, 0.0001)))
+		AudioServer.set_bus_mute(music_bus, music_volume <= 0.0)
+	if sfx_bus >= 0:
+		AudioServer.set_bus_volume_db(sfx_bus, linear_to_db(maxf(sfx_volume, 0.0001)))
+		AudioServer.set_bus_mute(sfx_bus, sfx_volume <= 0.0)
+	# The player's mute and an ad's temporary mute are tracked separately so
+	# closing an ad never un-mutes a player who chose silence.
+	AudioServer.set_bus_mute(AudioServer.get_bus_index("Master"), audio_muted or ad_audio_muted)
+
+
+
+
+
+func _on_settings_changed(music: float, sfx: float, muted: bool) -> void:
+	music_volume = music
+	sfx_volume = sfx
+	audio_muted = muted
+	apply_audio_settings()
+	write_save()
+
+
+
+
+
+func _on_node_added_for_button_sound(node: Node) -> void:
+	if node is BaseButton and not node.has_meta("tap_sound"):
+		node.set_meta("tap_sound", true)
+		(node as BaseButton).pressed.connect(func() -> void: play_sfx(button_sound_player))
+
+
+
+
+
+func make_audio_player(stream: AudioStream, volume_db: float, bus_name: String = "SFX") -> AudioStreamPlayer:
 	var player := AudioStreamPlayer.new()
-
 	player.stream = stream
-
 	player.volume_db = volume_db
-
+	player.bus = bus_name
 	add_child(player)
 
 	return player
@@ -893,6 +1159,8 @@ func _process(delta: float) -> void:
 	if banner_ad:
 		# Banner only on menu-style screens, never over active gameplay.
 		banner_ad.visible = start_screen.visible or shop_screen.visible or game_over_screen.visible
+	if pause_button:
+		pause_button.visible = game_started and not game_over and not get_tree().paused
 	if not chest_rolling:
 		return
 
@@ -1389,8 +1657,7 @@ func spawn_anchor(anchor_position: Vector2) -> void:
 
 	anchor.position = anchor_position
 
-	anchor.scale = Vector2(0.025, 0.025)
-
+	anchor.scale = Vector2.ONE * orb_scale
 	anchor.set_meta("pulse_offset", randf_range(0.0, TAU))
 
 	swing_anchors.add_child(anchor)
@@ -1407,8 +1674,7 @@ func spawn_bat(bat_position: Vector2) -> void:
 
 	bat.position = bat_position
 
-	bat.scale = Vector2(0.075, 0.075)
-
+	bat.scale = Vector2.ONE * bat_scale
 	bat.set_meta("home", bat_position)
 
 	bat.set_meta("phase", randf_range(0.0, TAU))
@@ -1590,8 +1856,7 @@ func spawn_power_up(kind: String, power_up_position: Vector2) -> void:
 
 	power_up.position = power_up_position
 
-	power_up.scale = Vector2(0.052, 0.052)
-
+	power_up.scale = Vector2.ONE * power_up_scale
 	power_up.set_meta("pulse_offset", randf_range(0.0, TAU))
 
 	power_up.set_meta("kind", kind)
@@ -1672,8 +1937,7 @@ func setup_orbiting_knives() -> void:
 
 		blade.texture = KNIFE_TEXTURE
 
-		blade.scale = Vector2(0.052, 0.052)
-
+		blade.scale = Vector2.ONE * power_up_scale
 		blade.hide()
 
 		blade_orbit.add_child(blade)
@@ -1794,8 +2058,7 @@ func animate_world_decorations(delta: float) -> void:
 
 			var pulse: float = 1.0 + sin(world_elapsed * 2.4 + float(anchor.get_meta("pulse_offset"))) * 0.09
 
-			anchor.scale = Vector2.ONE * 0.025 * pulse
-
+			anchor.scale = Vector2.ONE * orb_scale * pulse
 			anchor.rotation += delta * 0.35
 
 	for power_up_node in power_ups.get_children():
@@ -1806,8 +2069,7 @@ func animate_world_decorations(delta: float) -> void:
 
 			var pulse: float = 1.0 + sin(world_elapsed * 3.0 + float(power_up.get_meta("pulse_offset"))) * 0.12
 
-			power_up.scale = Vector2.ONE * 0.052 * pulse
-
+			power_up.scale = Vector2.ONE * power_up_scale * pulse
 			power_up.rotation += delta * 0.8
 
 
@@ -2186,31 +2448,36 @@ func player_hits_bot_rope(anchor_position: Vector2, rope_end: Vector2) -> bool:
 func bots_cut_ropes() -> void:
 
 	var cut_radius := 27.0
-
-	# A moving bot can cut any other bot's intact tether.
-
-	for cutter_node in bot_swings.get_children():
-
-		var cutter := cutter_node as Node2D
-
-		if not cutter:
-
+	# A moving bot can cut any other bot's intact tether. Positions and ropes are
+	# gathered once per frame, and a cheap bounding-box test skips the segment
+	# maths for ropes that are nowhere near the cutter (most pairs).
+	var bot_nodes := bot_swings.get_children()
+	var cutters: Array[Node2D] = []
+	var bot_positions: Array[Vector2] = []
+	var rope_targets: Array[Node2D] = []
+	var rope_boxes: Array[Rect2] = []
+	var rope_anchors: Array[Vector2] = []
+	for bot_node in bot_nodes:
+		var bot := bot_node as Node2D
+		if not bot:
 			continue
-
-		for target_node in bot_swings.get_children():
-
-			var target := target_node as Node2D
-
-			if not target or target == cutter or bool(target.get_meta("rope_cut")):
-
+		cutters.append(bot)
+		bot_positions.append(bot.global_position)
+		if not bool(bot.get_meta("rope_cut")):
+			var anchor_point: Vector2 = bot.get_meta("from_anchor")
+			rope_targets.append(bot)
+			rope_anchors.append(anchor_point)
+			rope_boxes.append(Rect2(anchor_point, Vector2.ZERO).expand(bot.global_position).grow(cut_radius))
+	for cutter_index in range(bot_positions.size()):
+		var cutter_position := bot_positions[cutter_index]
+		for rope_index in range(rope_targets.size()):
+			var target := rope_targets[rope_index]
+			if target == cutters[cutter_index] or not rope_boxes[rope_index].has_point(cutter_position):
 				continue
-
-			var target_anchor: Vector2 = target.get_meta("from_anchor")
-
-			var closest_point := Geometry2D.get_closest_point_to_segment(cutter.global_position, target_anchor, target.global_position)
-
-			if closest_point.distance_to(cutter.global_position) <= cut_radius:
-
+			if bool(target.get_meta("rope_cut")):
+				continue
+			var closest_point := Geometry2D.get_closest_point_to_segment(cutter_position, rope_anchors[rope_index], target.global_position)
+			if closest_point.distance_to(cutter_position) <= cut_radius:
 				target.set_meta("rope_cut", true)
 
 
@@ -2522,6 +2789,8 @@ func end_game() -> void:
 func show_death_wheel() -> void:
 	var wheel := PrizeWheel.new(active_game_mode != "TAG")
 	wheel.finished.connect(_on_death_wheel_finished)
+	wheel.spin_started.connect(func() -> void: play_sfx(wheel_spin_sound_player))
+	wheel.landed.connect(func(_revive: bool) -> void: play_sfx(success_sound_player))
 	add_child(wheel)
 
 
@@ -2578,11 +2847,12 @@ func finalize_game_over() -> void:
 
 func show_placeholder_ad(on_closed: Callable) -> void:
 	# Real ads silence game audio, so the placeholder does too.
-	var master_bus := AudioServer.get_bus_index("Master")
-	AudioServer.set_bus_mute(master_bus, true)
+	ad_audio_muted = true
+	apply_audio_settings()
 	var ad := PlaceholderAd.new(5.0)
 	ad.closed.connect(func() -> void:
-		AudioServer.set_bus_mute(master_bus, false)
+		ad_audio_muted = false
+		apply_audio_settings()
 		if on_closed.is_valid():
 			on_closed.call()
 	)
@@ -2631,6 +2901,7 @@ func revive_player() -> void:
 	revive_shield_time = REVIVE_SHIELD_SECONDS
 	game_over = false
 	show_power_message("REVIVED!")
+	play_sfx(revive_sound_player)
 	if not background_music_player.playing:
 		background_music_player.play()
 
@@ -3006,18 +3277,62 @@ func update_height_score() -> void:
 
 
 
+func read_save_file() -> ConfigFile:
+	# Load the save, falling back to the last good backup if the main file is
+	# missing or unreadable. Returns null when there is no usable save yet.
+	for path in [save_path, save_path + ".bak"]:
+		if not FileAccess.file_exists(path):
+			continue
+		var save_file := ConfigFile.new()
+		if save_file.load(path) == OK:
+			return save_file
+		push_warning("Save file %s could not be read; trying backup." % path)
+	return null
+
+
+
+
+
+func write_save() -> void:
+	# Scores, profile and settings are written together so one section can
+	# never overwrite another. The file is written to a temp path first and then
+	# swapped in, keeping a .bak of the previous good save.
+	var save_file := ConfigFile.new()
+	save_file.set_value("meta", "save_version", SAVE_VERSION)
+	save_file.set_value("scores", "high_score", coin_high_score)
+	save_file.set_value("scores", "best_height_score", climb_high_score)
+	save_file.set_value("scores", "coin_high_score", coin_high_score)
+	save_file.set_value("scores", "climb_high_score", climb_high_score)
+	save_file.set_value("profile", "wallet_coins", wallet_coins)
+	save_file.set_value("profile", "selected_skin", selected_skin)
+	save_file.set_value("profile", "pending_chest_skin", chest_pending_skin)
+	var saved_skin_ids: Array[String] = []
+	for skin_id in unlocked_skins:
+		saved_skin_ids.append(str(skin_id))
+	save_file.set_value("profile", "unlocked_skins", ",".join(saved_skin_ids))
+	save_file.set_value("settings", "music_volume", music_volume)
+	save_file.set_value("settings", "sfx_volume", sfx_volume)
+	save_file.set_value("settings", "muted", audio_muted)
+	var temp_path := save_path + ".tmp"
+	if save_file.save(temp_path) != OK:
+		push_warning("Could not write save file.")
+		return
+	if FileAccess.file_exists(save_path):
+		DirAccess.copy_absolute(save_path, save_path + ".bak")
+		DirAccess.remove_absolute(save_path)
+	if DirAccess.rename_absolute(temp_path, save_path) != OK:
+		save_file.save(save_path)
+
+
+
+
+
 func load_high_score() -> void:
-
-	var score_file := ConfigFile.new()
-
-	if score_file.load(SCORE_SAVE_PATH) == OK:
-
-		coin_high_score = int(score_file.get_value("scores", "coin_high_score", score_file.get_value("scores", "high_score", 0)))
-
-		climb_high_score = int(score_file.get_value("scores", "climb_high_score", score_file.get_value("scores", "best_height_score", 0)))
-
+	var score_file := read_save_file()
+	if score_file:
+		coin_high_score = maxi(0, int(score_file.get_value("scores", "coin_high_score", score_file.get_value("scores", "high_score", 0))))
+		climb_high_score = maxi(0, int(score_file.get_value("scores", "climb_high_score", score_file.get_value("scores", "best_height_score", 0))))
 	best_height_score = climb_high_score
-
 	high_score = coin_high_score
 
 
@@ -3025,75 +3340,45 @@ func load_high_score() -> void:
 
 
 func load_profile() -> void:
-
-	var profile_file := ConfigFile.new()
-
-	if profile_file.load(SCORE_SAVE_PATH) == OK:
-
-		wallet_coins = int(profile_file.get_value("profile", "wallet_coins", 0))
-
+	var profile_file := read_save_file()
+	if profile_file:
+		wallet_coins = maxi(0, int(profile_file.get_value("profile", "wallet_coins", 0)))
 		selected_skin = int(profile_file.get_value("profile", "selected_skin", 0))
-
 		var unlocked_text := str(profile_file.get_value("profile", "unlocked_skins", "0"))
-
 		unlocked_skins.clear()
-
 		for skin_id_text in unlocked_text.split(",", false):
-
-			unlocked_skins.append(int(skin_id_text))
+			# Ignore anything that is not a valid skin id instead of crashing later.
+			if not skin_id_text.strip_edges().is_valid_int():
+				continue
+			var skin_id := int(skin_id_text)
+			if skin_id >= 0 and skin_id < skin_definitions.size() and not unlocked_skins.has(skin_id):
+				unlocked_skins.append(skin_id)
 		# A chest reward left unclaimed when the app closed is granted on launch.
 		var pending_from_save := int(profile_file.get_value("profile", "pending_chest_skin", -1))
 		if pending_from_save >= 0 and pending_from_save < skin_definitions.size() and not unlocked_skins.has(pending_from_save):
 			unlocked_skins.append(pending_from_save)
+		music_volume = clampf(float(profile_file.get_value("settings", "music_volume", music_volume)), 0.0, 1.0)
+		sfx_volume = clampf(float(profile_file.get_value("settings", "sfx_volume", sfx_volume)), 0.0, 1.0)
+		audio_muted = bool(profile_file.get_value("settings", "muted", false))
 	if not unlocked_skins.has(0):
-
 		unlocked_skins.append(0)
-
 	if selected_skin < 0 or selected_skin >= skin_definitions.size() or not unlocked_skins.has(selected_skin):
-
 		selected_skin = 0
+	apply_audio_settings()
 
 
 
 
 
 func save_profile() -> void:
-
-	var profile_file := ConfigFile.new()
-
-	profile_file.load(SCORE_SAVE_PATH)
-
-	profile_file.set_value("profile", "wallet_coins", wallet_coins)
-
-	profile_file.set_value("profile", "selected_skin", selected_skin)
-	profile_file.set_value("profile", "pending_chest_skin", chest_pending_skin)
-	var saved_skin_ids: Array[String] = []
-
-	for skin_id in unlocked_skins:
-
-		saved_skin_ids.append(str(skin_id))
-
-	profile_file.set_value("profile", "unlocked_skins", ",".join(saved_skin_ids))
-
-	profile_file.save(SCORE_SAVE_PATH)
+	write_save()
 
 
 
 
 
 func save_high_score() -> void:
-
-	var score_file := ConfigFile.new()
-
-	score_file.set_value("scores", "high_score", coin_high_score)
-
-	score_file.set_value("scores", "best_height_score", climb_high_score)
-
-	score_file.set_value("scores", "coin_high_score", coin_high_score)
-
-	score_file.set_value("scores", "climb_high_score", climb_high_score)
-
-	score_file.save(SCORE_SAVE_PATH)
+	write_save()
 
 
 
@@ -3197,8 +3482,7 @@ func build_skin_shop() -> void:
 
 		var owned := unlocked_skins.has(skin_id)
 		# Rounded card tinted by rarity, drawn behind the Jelly artwork.
-		var tier_colors := {"Common": CuteStyle.MINT, "Uncommon": CuteStyle.SKY, "Rare": CuteStyle.LAVENDER, "Epic": CuteStyle.CORAL, "Legendary": CuteStyle.BUTTER}
-		var tier_color: Color = tier_colors.get(str(skin.get("tier", "Common")), CuteStyle.MINT)
+		var tier_color: Color = CuteStyle.rarity_color(str(skin.get("tier", "Common")))
 		var card := Panel.new()
 		card.show_behind_parent = true
 		card.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -3570,6 +3854,7 @@ func finish_chest() -> void:
 	chest_carousel_backdrop.show()
 	chest_carousel.show()
 	chest_result_label.text = "YOU GOT: %s!" % str(skin_definitions[chest_target_skin]["name"])
+	play_sfx(success_sound_player)
 	update_coin_counter()
 	refresh_chest_claim_ui()
 
@@ -3820,12 +4105,12 @@ func _input(event: InputEvent) -> void:
 
 		return
 
-	if not game_started or game_over:
-
+	if not game_started or game_over or get_tree().paused:
 		return
-
-
-
+	# Taps on the pause button belong to the button, not to the jelly.
+	if pause_button and pause_button.visible and (event is InputEventMouseButton or event is InputEventScreenTouch) and event.pressed:
+		if pause_button.get_global_rect().grow(12.0).has_point(event.position):
+			return
 	# Mouse click on Windows
 
 	if event is InputEventMouseButton:
@@ -3885,9 +4170,11 @@ func start_hold() -> void:
 
 
 func end_hold() -> void:
-
+	# A release without a matching press (e.g. lifting the finger that tapped
+	# Resume or a menu button) must not trigger a surprise jump.
+	if not is_pointer_held:
+		return
 	is_pointer_held = false
-
 	if is_swinging:
 
 		release_swing()

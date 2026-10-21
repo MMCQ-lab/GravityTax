@@ -5,7 +5,8 @@ extends CanvasLayer
 # Slice widths match their real odds, so what the player sees is what they get.
 
 signal finished(coins: int, revive: bool)
-
+signal spin_started
+signal landed(revive: bool)
 const SLICES := [
 	{"label": "5", "coins": 5, "weight": 22.0, "color": Color("c7e6ff")},
 	{"label": "10", "coins": 10, "weight": 22.0, "color": Color("bdeedd")},
@@ -156,8 +157,10 @@ func _on_button_pressed() -> void:
 	var current := _wheel.rotation
 	while target > current - TAU * 5.0:
 		target -= TAU
+	spin_started.emit()
+	# 2.5 s matches the length of the slowing-down click sound.
 	var tween := create_tween()
-	tween.tween_property(_wheel, "rotation", target, 3.4).set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_OUT)
+	tween.tween_property(_wheel, "rotation", target, 2.5).set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_OUT)
 	tween.tween_callback(_show_result)
 
 
@@ -166,6 +169,7 @@ func _show_result() -> void:
 	_done = true
 	var slice: Dictionary = _slices[_result_index]
 	var revive := bool(slice.get("revive", false))
+	landed.emit(revive)
 	if revive:
 		_result_label.text = "REVIVED!  +%d COINS" % int(slice["coins"])
 		_result_label.add_theme_color_override("font_color", CuteStyle.ACCENT)

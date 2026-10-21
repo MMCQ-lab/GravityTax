@@ -7,13 +7,14 @@ extends CanvasLayer
 
 const HEIGHT := 100.0
 
-
+var _strip: Panel
 func _init() -> void:
 	layer = 50
 
 
 func _ready() -> void:
 	var strip := Panel.new()
+	_strip = strip
 	strip.name = "BannerStrip"
 	strip.mouse_filter = Control.MOUSE_FILTER_STOP
 	strip.anchor_left = 0.0
@@ -43,3 +44,9 @@ func _ready() -> void:
 	tag.position = Vector2(12.0, 6.0)
 	CuteStyle.style_label(tag, Color("c8ccd6"), 14)
 	strip.add_child(tag)
+
+
+func set_bottom_inset(inset: float) -> void:
+	# Grow the white strip under the home indicator so the "AD" stays visible.
+	if _strip:
+		_strip.offset_top = -(HEIGHT + inset)

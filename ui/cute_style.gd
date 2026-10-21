@@ -18,6 +18,14 @@ const WHITE := Color(1.0, 1.0, 1.0, 1.0)
 
 const OPTIONAL_FONT_PATH := "res://fonts/cute.ttf"
 
+# Rarity colours used everywhere a tier is shown.
+const RARITY_COLORS := {
+	"COMMON": Color("9aa3b2"),
+	"UNCOMMON": Color("43c463"),
+	"RARE": Color("3a8dff"),
+	"EPIC": Color("9b5cff"),
+	"LEGENDARY": Color("f5b821"),
+}
 static var _font: Font = null
 
 
@@ -202,3 +210,7 @@ static func pop_in(control: Control, delay: float = 0.0) -> void:
 	tween.set_parallel(true)
 	tween.tween_property(control, "scale", Vector2.ONE, 0.38).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	tween.tween_property(control, "modulate:a", 1.0, 0.2)
+
+
+static func rarity_color(tier: String) -> Color:
+	return RARITY_COLORS.get(tier.to_upper(), RARITY_COLORS["COMMON"])
