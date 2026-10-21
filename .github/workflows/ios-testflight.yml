@@ -18,8 +18,43 @@ permissions:
   contents: read
 
 jobs:
+  validate:
+    name: Validate project and run tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GODOT_VERSION: 4.7.2
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Godot
+        uses: chickensoft-games/setup-godot@v2.4.3
+        with:
+          version: ${{ env.GODOT_VERSION }}
+          use-dotnet: false
+          include-templates: false
+
+      - name: Import project and check every script parses
+        run: |
+          set -euo pipefail
+          godot --headless --path "$GITHUB_WORKSPACE" --import
+          status=0
+          for script in $(git ls-files '*.gd'); do
+            if ! output=$(godot --headless --path "$GITHUB_WORKSPACE" --check-only --script "res://$script" 2>&1) || echo "$output" | grep -q "SCRIPT ERROR"; then
+              echo "::error file=$script::Script failed to parse"
+              echo "$output"
+              status=1
+            fi
+          done
+          exit $status
+
+      - name: Run automated tests
+        run: godot --headless --path "$GITHUB_WORKSPACE" -s res://tests/run_tests.gd
+
   build-ios:
     name: Build signed iOS IPA
+    needs: validate
     runs-on: macos-26
     timeout-minutes: 45
     env:
@@ -105,6 +140,10 @@ jobs:
           BUILD_NUMBER: ${{ steps.build_number.outputs.number }}
         run: |
           set -euo pipefail
+          # Marketing version comes from project.godot (config/version), e.g. 1.0.0
+          MARKETING_VERSION="$(sed -n 's/^config\/version="\([0-9][0-9.]*\)"$/\1/p' project.godot)"
+          [[ "$MARKETING_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::config/version in project.godot must be semantic (x.y.z)"; exit 1; }
+          echo "Marketing version: $MARKETING_VERSION, build: $BUILD_NUMBER"
           XCODE_PROJECT="$(find build/ios -name '*.xcodeproj' -print -quit)"
           SCHEME="$(xcodebuild -list -json -project "$XCODE_PROJECT" | /usr/bin/python3 -c 'import json,sys; print(json.load(sys.stdin)["project"]["schemes"][0])')"
           xcodebuild \
@@ -120,7 +159,7 @@ jobs:
             CODE_SIGN_IDENTITY='Apple Distribution' \
             PROVISIONING_PROFILE_SPECIFIER="$APPLE_PROVISIONING_PROFILE_NAME" \
             CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
-            MARKETING_VERSION='1.0.0' \
+            MARKETING_VERSION="$MARKETING_VERSION" \
             clean archive
 
       - name: Export App Store IPA
