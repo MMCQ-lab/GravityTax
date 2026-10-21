@@ -50,6 +50,11 @@ func _ready() -> void:
 	_sdk.ios_real_rewarded_id = REWARDED_UNIT
 	_sdk.ios_debug_interstitial_id = IOS_TEST_INTERSTITIAL
 	_sdk.ios_real_interstitial_id = INTERSTITIAL_UNIT
+	# Jelly Swing appeals to kids: request child-directed (COPPA) and
+	# under-age-of-consent (EEA/UK) treatment and family-friendly ads only.
+	_sdk.max_ad_content_rating = AdmobConfig.ContentRating.G
+	_sdk.child_directed = AdmobConfig.TagForChildDirectedTreatment.TRUE
+	_sdk.under_age_of_consent = AdmobConfig.TagForUnderAgeOfConsent.TRUE
 	_sdk.banner_position = LoadAdRequest.AdPosition.BOTTOM
 	_sdk.banner_size = LoadAdRequest.RequestedAdSize.ADAPTIVE
 	_sdk.banner_anchor_to_safe_area = true

@@ -20,7 +20,11 @@ Nothing. Scores, coins, unlocked jellies and settings stay on the device (`user:
 
 Data Collected? **Yes** (because of the ad SDK).
 
-## Tracking and the ATT prompt (a decision for you)
+## Decision made: kid-friendly ads, no tracking
+
+Because the game appeals to kids, ad requests are tagged **child-directed (COPPA)** and **under age of consent (EEA/UK)**, and are limited to **G-rated** content (`ads/ad_manager.gd`). Google then serves only non-personalized ads. **No ATT prompt.** On App Privacy, answer **No** for every "used to track you" question. The data types above are still "collected" by the ad SDK, for Third-Party Advertising and Analytics, and are **not linked** to the user.
+
+## Background: tracking and the ATT prompt
 
 The game currently **does not** show Apple's App Tracking Transparency (ATT) prompt, and `NSUserTrackingUsageDescription` is not set. In that case iOS gives the ad SDK no IDFA. Google can still serve ads, including through Google's own consent tools.
 

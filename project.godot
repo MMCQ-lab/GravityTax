@@ -25,7 +25,7 @@ enabled=PackedStringArray("res://addons/AdmobPlugin/plugin.cfg")
 
 [ads]
 
-use_production_ads=false
+use_production_ads=true
 
 [display]
 
