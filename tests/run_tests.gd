@@ -231,10 +231,14 @@ func test_continue_and_interstitial() -> void:
 	game.end_game()
 	await wait(0.1)
 	wheel = child_of(PrizeWheel)
+	var wallet_before_third_death: int = game.wallet_coins
 	wheel.finished.emit(5, false)
 	wheel.queue_free()
 	await wait(0.1)
-	check("interstitial appears every 3rd game over", child_of(PlaceholderAd) != null)
+	check("third death reaches an interstitial opportunity", game.game_overs_since_ad == 0 and child_of(PlaceholderAd) == null)
+	check("standard interstitial grants no coins", game.wallet_coins == wallet_before_third_death + 5)
+	game.finalize_game_over()
+	check("same death cannot trigger twice", game.game_overs_since_ad == 0)
 	close_all_ads()
 	game.return_to_main_menu()
 

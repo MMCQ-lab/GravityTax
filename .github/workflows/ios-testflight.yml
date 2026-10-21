@@ -80,6 +80,9 @@ jobs:
           use-dotnet: false
           include-templates: true
 
+      - name: Install AdMob iOS package helper
+        run: gem install --user-install xcodeproj --no-document
+
       - name: Decode signing certificate and provisioning profile
         env:
           APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
@@ -124,6 +127,10 @@ jobs:
           godot --headless --path "$GITHUB_WORKSPACE" --import
           godot --headless --path "$GITHUB_WORKSPACE" --export-release "$EXPORT_PRESET" "build/ios/JellySwing.xcodeproj"
           test -d build/ios/JellySwing.xcodeproj
+          # Fail before signing if the native plugin or Google SDK was omitted.
+          grep -R -q 'AdmobPlugin' build/ios/JellySwing.xcodeproj/project.pbxproj
+          grep -R -q 'GoogleMobileAds' build/ios/JellySwing.xcodeproj/project.pbxproj
+          grep -q 'GADApplicationIdentifier' build/ios/JellySwing/JellySwing-Info.plist
 
       - name: Set an automatically incrementing build number
         id: build_number

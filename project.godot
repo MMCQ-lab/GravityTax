@@ -19,6 +19,14 @@ boot_splash/stretch_mode=0
 boot_splash/image="res://images/mmcq_lab_logo.png"
 config/icon="res://images/app_icon_1024.png"
 
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/AdmobPlugin/plugin.cfg")
+
+[ads]
+
+use_production_ads=false
+
 [display]
 
 window/size/viewport_width=720
