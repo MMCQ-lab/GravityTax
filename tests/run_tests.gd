@@ -84,6 +84,7 @@ func _run() -> void:
 	await test_climb_bots()
 	await test_spider_webs()
 	await test_bats_chase_bots()
+	await test_tag_badges()
 	clear_save_files()
 	print("\n%d passed, %d failed" % [passes, failures])
 	quit(1 if failures > 0 else 0)
@@ -505,7 +506,7 @@ func test_spider_webs() -> void:
 	game.configure_climb_level()
 	game.populate_world()
 	game.place_player_on_start_pad()
-	check("spider webs appear on level 2", game.spider_webs.get_child_count() == game.spider_web_count() and game.spider_web_count() >= 3)
+	check("spider webs appear on level 2", game.spider_webs.get_child_count() == game.spider_web_count() and game.spider_web_count() >= 9)
 	game.revive_shield_time = 0.0
 	game.knife_time = 0.0
 	for bat in game.bats.get_children():
@@ -566,3 +567,23 @@ func test_bats_chase_bots() -> void:
 	await physics_frame
 	check("a bot at the summit moves on", not is_instance_valid(climber) or climber.is_queued_for_deletion())
 	game.return_to_main_menu()
+
+
+func test_tag_badges() -> void:
+	check("Tag gives 30 seconds", is_equal_approx(game.TAG_TIMEOUT_SECONDS, 30.0))
+	game.select_game_mode("TAG")
+	game.revive_shield_time = 999.0
+	await physics_frame
+	await physics_frame
+	var shown := 0
+	for badge in game.tag_badges.get_children():
+		if badge.visible and badge.text.begins_with("IT "):
+			shown += 1
+	check("every IT jelly wears a countdown badge", game.tag_badges.visible and shown == game.tag_holders.size())
+	check("no YOU'RE IT banner while safe", not game.it_banner.visible)
+	game.replace_tag_holder(game.tag_holders[0], game.block)
+	await physics_frame
+	await physics_frame
+	check("big banner when you're IT", game.it_banner.visible and game.it_banner.text.begins_with("YOU'RE IT!"))
+	game.return_to_main_menu()
+	check("badges hide on the menu", not game.tag_badges.visible and not game.it_banner.visible)
