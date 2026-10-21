@@ -1886,17 +1886,12 @@ func collect_power_ups() -> void:
 
 
 func apply_power_up(kind: String) -> void:
-
 	is_swinging = false
-
 	swing_anchor = null
-
+	# Every power-up (rocket, warp, magnet, knives) plays the pickup sound.
+	play_sfx(jetpack_sound_player)
 	if kind == "rocket":
-
 		velocity = Vector2(velocity.x * 1.4, -1150.0)
-
-		play_sfx(jetpack_sound_player)
-
 		show_power_message("ROCKET BOOST!")
 
 	elif kind == "teleport":
@@ -2780,6 +2775,9 @@ func end_game() -> void:
 	if active_game_mode == "TAG" and tag_round_won:
 		finalize_game_over()
 	else:
+		# The game-over sting plays at the moment of death, then again on the
+		# final game-over screen if the spin doesn't revive.
+		play_sfx(game_over_sound_player)
 		show_death_wheel()
 
 
