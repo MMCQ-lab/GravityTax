@@ -145,6 +145,10 @@ jobs:
             exit 1
           }
           test -d build/ios/JellySwing.xcodeproj || report "Godot did not create the Xcode project"
+          # Godot 4.7.2 skips the AdMob plugin's post-export hook for project-only
+          # exports, so add the Google Mobile Ads Swift package here.
+          ruby scripts/add_admob_spm.rb build/ios/JellySwing.xcodeproj || report "Could not add the Google Mobile Ads Swift package"
+          xcodebuild -resolvePackageDependencies -project build/ios/JellySwing.xcodeproj || report "Swift package resolution failed"
           grep -q 'AdmobPlugin' build/ios/JellySwing.xcodeproj/project.pbxproj || report "AdmobPlugin missing from Xcode project"
           grep -q 'GoogleMobileAds' build/ios/JellySwing.xcodeproj/project.pbxproj || report "GoogleMobileAds Swift package missing from Xcode project"
           grep -q 'GADApplicationIdentifier' build/ios/JellySwing/JellySwing-Info.plist || report "GADApplicationIdentifier missing from Info.plist"
