@@ -82,6 +82,8 @@ func _run() -> void:
 	await test_player_name()
 	await test_bouncy_walls()
 	await test_climb_bots()
+	await test_spider_webs()
+	await test_bats_chase_bots()
 	clear_save_files()
 	print("\n%d passed, %d failed" % [passes, failures])
 	quit(1 if failures > 0 else 0)
@@ -381,7 +383,7 @@ func test_tag_ai() -> void:
 	game.revive_shield_time = 999.0
 	var hunters_with_targets := 0
 	var bot_tags := 0
-	var previous: Array = game.tag_holders.duplicate()
+	var previous: Array = game.tag_holders.map(func(h): return h.get_instance_id() if is_instance_valid(h) else 0)
 	for frame in range(600):
 		game.revive_shield_time = 999.0
 		game.tag_times[game.block] = 0.0
@@ -389,9 +391,11 @@ func test_tag_ai() -> void:
 		if game.game_over:
 			break
 		for holder in game.tag_holders:
-			if holder != game.block and not previous.has(holder) and not previous.has(game.block) and not game.tag_holders.has(game.block):
+			if not is_instance_valid(holder):
+				continue
+			if holder != game.block and not previous.has(holder.get_instance_id()) and not previous.has(game.block.get_instance_id()) and not game.tag_holders.has(game.block):
 				bot_tags += 1
-		previous = game.tag_holders.duplicate()
+		previous = game.tag_holders.map(func(h): return h.get_instance_id() if is_instance_valid(h) else 0)
 	for holder in game.tag_holders:
 		if holder != game.block and is_instance_valid(holder) and holder.has_meta("tag_target"):
 			hunters_with_targets += 1
@@ -484,4 +488,81 @@ func test_climb_bots() -> void:
 				best_climb = maxf(best_climb, float(start_y[bot]) - bot.global_position.y)
 	print("   best bot climb in 8s: %d px" % int(best_climb))
 	check("Sky Climb bots climb well", best_climb > 700.0)
+	game.return_to_main_menu()
+
+
+func put_jelly_at(point: Vector2) -> void:
+	game.block.position = point - game.block.size / 2.0
+	game.previous_player_center = point
+	game.velocity = Vector2.ZERO
+	game.is_swinging = false
+
+
+func test_spider_webs() -> void:
+	game.select_game_mode("CLIMB")
+	check("no spider webs on climb level 1", game.spider_webs.get_child_count() == 0)
+	game.climb_level = 2
+	game.configure_climb_level()
+	game.populate_world()
+	game.place_player_on_start_pad()
+	check("spider webs appear on level 2", game.spider_webs.get_child_count() == game.spider_web_count() and game.spider_web_count() >= 3)
+	game.revive_shield_time = 0.0
+	game.knife_time = 0.0
+	for bat in game.bats.get_children():
+		bat.queue_free()
+	var webs: Array = game.spider_webs.get_children()
+	# Stuck, then tap free.
+	put_jelly_at(webs[0].global_position)
+	await physics_frame
+	await physics_frame
+	check("touching a web gets Jelly stuck", game.player_stuck_web == webs[0])
+	for tap in range(game.WEB_ESCAPE_TAPS):
+		game.start_hold()
+	game.end_hold()
+	check("tapping fast breaks free", game.player_stuck_web == null and (not is_instance_valid(webs[0]) or webs[0].is_queued_for_deletion()))
+	# Knives slice a web.
+	put_jelly_at(webs[1].global_position)
+	await physics_frame
+	await physics_frame
+	game.knife_time = 5.0
+	await physics_frame
+	await physics_frame
+	check("knives destroy the web and spider", (not is_instance_valid(webs[1]) or webs[1].is_queued_for_deletion()) and game.player_stuck_web == null)
+	game.knife_time = 0.0
+	# The spider eats a stuck Jelly.
+	put_jelly_at(webs[2].global_position)
+	for frame in range(300):
+		game.revive_shield_time = 0.0
+		await physics_frame
+		if game.game_over:
+			break
+	check("the spider eats a stuck Jelly", game.game_over)
+	await wait(0.2)
+	game.return_to_main_menu()
+	await wait(0.2)
+
+
+func test_bats_chase_bots() -> void:
+	game.select_game_mode("CLIMB")
+	game.revive_shield_time = 999.0
+	var bot := game.bot_swings.get_child(0) as Node2D
+	for bat in game.bats.get_children():
+		bat.queue_free()
+	await physics_frame
+	game.spawn_bat(bot.global_position + Vector2(40.0, 0.0))
+	var bat: Node = game.bats.get_child(game.bats.get_child_count() - 1)
+	var woke_for_bot := false
+	for frame in range(30):
+		game.revive_shield_time = 999.0
+		await physics_frame
+		if is_instance_valid(bat) and bool(bat.get_meta("chasing")) and bool(bat.get_meta("chases_bot")):
+			woke_for_bot = true
+			break
+	check("bats chase racer jellies too", woke_for_bot)
+	# A racer that reaches the summit leaves for the next level.
+	var climber := game.bot_swings.get_child(game.bot_swings.get_child_count() - 1) as Node2D
+	climber.position.y = game.CLIMB_LEVEL_TOP_Y
+	await physics_frame
+	await physics_frame
+	check("a bot at the summit moves on", not is_instance_valid(climber) or climber.is_queued_for_deletion())
 	game.return_to_main_menu()

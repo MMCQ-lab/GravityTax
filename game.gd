@@ -173,6 +173,10 @@ const CLIMB_SKY_CHAIN: Array[Color] = [
 ]
 const CLIMB_LEVEL_TOP_Y := 220.0
 var climb_level := 1
+# Spider webs appear in Sky Climb from level 2.
+var spider_webs: Node2D
+var player_stuck_web: SpiderWeb = null
+const WEB_ESCAPE_TAPS := 8
 var climb_height_bank := 0
 
 var jelly_swipe_tracking := false
@@ -640,6 +644,10 @@ func _ready() -> void:
 	power_message.hide()
 
 	setup_orbiting_knives()
+	spider_webs = Node2D.new()
+	spider_webs.name = "SpiderWebs"
+	add_child(spider_webs)
+	move_child(spider_webs, bats.get_index())
 
 	update_kill_counter()
 
@@ -877,6 +885,7 @@ func apply_cute_ui() -> void:
 func build_pause_and_settings() -> void:
 	settings_panel = SettingsPanel.new()
 	settings_panel.credits_text = build_credits_text()
+	settings_panel.version_log_text = build_version_log_text()
 	add_child(settings_panel)
 	settings_panel.settings_changed.connect(_on_settings_changed)
 	settings_panel.name_changed.connect(set_player_name)
@@ -919,6 +928,38 @@ func build_pause_and_settings() -> void:
 
 
 
+
+
+const VERSION_LOG: Array[Dictionary] = [
+	{"version": "1.0.2", "notes": [
+		"Sky Climb jellies that reach the top move on to the next level.",
+		"Bats now chase the other jellies too.",
+		"Spiders! From Sky Climb level 2, sticky webs trap jellies. Tap fast to escape, or slice webs with spinning knives.",
+		"What's New page in Settings.",
+	]},
+	{"version": "1.0.1", "notes": [
+		"Smarter jellies: they climb in Sky Climb and chase or run in Jelly Tag.",
+		"Jellies can tag each other in Jelly Tag.",
+		"Much bouncier walls.",
+		"Pick your own name in Settings. It shows on the leaderboard.",
+		"Rope-cut messages name the jelly who did it.",
+		"New loading screen and a bigger mute button.",
+	]},
+	{"version": "1.0.0", "notes": [
+		"First release: Coin Run, Sky Climb and Jelly Tag.",
+		"50 jellies to collect, chests and the lucky spin.",
+	]},
+]
+
+
+func build_version_log_text() -> String:
+	var lines: Array[String] = ["You have version %s." % str(ProjectSettings.get_setting("application/config/version", "1.0")), ""]
+	for entry in VERSION_LOG:
+		lines.append("VERSION %s" % str(entry["version"]))
+		for note in entry["notes"]:
+			lines.append("•  %s" % str(note))
+		lines.append("")
+	return "\n".join(lines)
 
 
 func build_credits_text() -> String:
@@ -1507,6 +1548,7 @@ func _physics_process(delta: float) -> void:
 	collect_coins(delta)
 
 	update_bats(delta)
+	update_spider_webs(delta)
 
 	update_swing_rope()
 
@@ -1541,6 +1583,8 @@ func populate_world() -> void:
 		bot_swings.remove_child(bot)
 
 		bot.queue_free()
+
+	clear_spider_webs()
 
 	coin_positions.clear()
 
@@ -1648,6 +1692,9 @@ func populate_world() -> void:
 			randf_range(720.0, floor_y - 220.0)
 
 		))
+
+	if active_game_mode == "CLIMB" and climb_level >= 2:
+		spawn_spider_webs()
 
 	for rocket_index in range(rocket_count):
 
@@ -1831,6 +1878,7 @@ func spawn_bat(bat_position: Vector2) -> void:
 	bat.set_meta("ignore_until", 0.0)
 
 	bat.set_meta("arming_time", 0.0)
+	bat.set_meta("chases_bot", false)
 
 	bats.add_child(bat)
 
@@ -2263,6 +2311,24 @@ func update_swing_bots(delta: float) -> void:
 
 		var rope_cut: bool = bool(bot.get_meta("rope_cut"))
 		var rope_attached_at: float = float(bot.get_meta("rope_attached_at"))
+
+		# A racer caught in a spider web can't move.
+		if bot.has_meta("stuck_web"):
+			var stuck_in = bot.get_meta("stuck_web")
+			if is_instance_valid(stuck_in):
+				bot.global_position = (stuck_in as Node2D).global_position
+				bot.set_meta("velocity", Vector2.ZERO)
+				continue
+			bot.remove_meta("stuck_web")
+			bot.set_meta("rope_cut", true)
+			rope_cut = true
+
+		# A Sky Climb racer that reaches the summit moves on to the next level.
+		if active_game_mode == "CLIMB" and bot.position.y <= CLIMB_LEVEL_TOP_Y + 40.0:
+			show_power_message("%s MADE IT TO LEVEL %d!" % [str(bot.get_meta("name", "A JELLY")), climb_level + 1])
+			bot_swings.remove_child(bot)
+			bot.queue_free()
+			continue
 
 		# No racer may stay tethered to a single orb for longer than six seconds.
 		if not rope_cut and world_elapsed - rope_attached_at >= 6.0:
@@ -2767,6 +2833,8 @@ func choose_tag_chaser() -> void:
 	var nearest_distance := INF
 	tag_chaser = null
 	for holder in tag_holders:
+		if not is_instance_valid(holder):
+			continue
 		var bot := holder as Node2D
 		if bot and bot != block:
 			var distance := bot.global_position.distance_squared_to(get_player_center())
@@ -2780,6 +2848,8 @@ func update_tag_status() -> void:
 		return
 	var holder_lines: Array[String] = []
 	for holder in tag_holders:
+		if not is_instance_valid(holder):
+			continue
 		var holder_name := display_player_name() if holder == block else str(holder.get_meta("name", "RACER"))
 		var seconds_left := maxi(0, ceili(TAG_TIMEOUT_SECONDS - float(tag_times.get(holder, 0.0))))
 		holder_lines.append("%s  %ds" % [holder_name, seconds_left])
@@ -3100,7 +3170,23 @@ func update_bats(delta: float) -> void:
 
 
 
-			var hunt_direction: Vector2 = (jelly_center - bat.global_position).normalized()
+			var hunt_target := jelly_center
+			if bool(bat.get_meta("chases_bot")):
+				var prey = bat.get_meta("prey") if bat.has_meta("prey") else null
+				if not is_instance_valid(prey) or (prey as Node).get_parent() != bot_swings:
+					_calm_bat(bat, 1.0)
+					continue
+				var prey_bot := prey as Node2D
+				hunt_target = prey_bot.global_position
+				if hunt_target.distance_to(bat.global_position) < bat_attack_radius + 22.0:
+					if hunt_target.distance_to(jelly_center) < 900.0:
+						show_power_message("A BAT GOT %s!" % str(prey_bot.get_meta("name", "A JELLY")))
+					bot_swings.remove_child(prey_bot)
+					prey_bot.queue_free()
+					_calm_bat(bat, 2.0)
+					continue
+
+			var hunt_direction: Vector2 = (hunt_target - bat.global_position).normalized()
 
 			# The run ramps up gradually, rewarding early exploration before the pressure rises.
 
@@ -3110,7 +3196,7 @@ func update_bats(delta: float) -> void:
 
 			bat.scale.x = abs(bat.scale.x) * sign(hunt_direction.x) if hunt_direction.x != 0.0 else bat.scale.x
 
-			if has_player_contact(bat.global_position, bat_attack_radius) and revive_shield_time <= 0.0:
+			if not bool(bat.get_meta("chases_bot")) and has_player_contact(bat.global_position, bat_attack_radius) and revive_shield_time <= 0.0:
 
 				end_game()
 
@@ -3132,11 +3218,132 @@ func update_bats(delta: float) -> void:
 
 				# Touching a patrolling bat wakes it for one limited hunt.
 				bat.set_meta("chasing", true)
+				bat.set_meta("chases_bot", false)
 				bat.set_meta("chase_started_at", world_elapsed)
 				bat.set_meta("arming_time", bat_arm_delay)
 
+			elif world_elapsed >= float(bat.get_meta("ignore_until")):
+
+				# Bats hunt the racer jellies too.
+				for bot_node in bot_swings.get_children():
+					var bot := bot_node as Node2D
+					if bot and not bot.has_meta("stuck_web") and bot.global_position.distance_squared_to(bat.global_position) < bat_wake_radius * bat_wake_radius:
+						bat.set_meta("chasing", true)
+						bat.set_meta("chases_bot", true)
+						bat.set_meta("prey", bot)
+						bat.set_meta("chase_started_at", world_elapsed)
+						bat.set_meta("arming_time", bat_arm_delay)
+						break
 
 
+
+
+
+func _calm_bat(bat: Sprite2D, delay: float) -> void:
+	bat.set_meta("chasing", false)
+	bat.set_meta("chases_bot", false)
+	bat.set_meta("chase_started_at", -1.0)
+	bat.set_meta("ignore_until", world_elapsed + delay)
+	if bat.has_meta("prey"):
+		bat.remove_meta("prey")
+
+
+func clear_spider_webs() -> void:
+	player_stuck_web = null
+	if not spider_webs:
+		return
+	for web in spider_webs.get_children():
+		spider_webs.remove_child(web)
+		web.queue_free()
+
+
+func spider_web_count() -> int:
+	return mini(3 + (climb_level - 2) * 2, 10)
+
+
+func spawn_spider_webs() -> void:
+	var start := get_start_pad_position()
+	for web_index in range(spider_web_count()):
+		var web_position := Vector2.ZERO
+		for attempt in range(12):
+			web_position = Vector2(randf_range(170.0, map_width - 170.0), randf_range(900.0, floor_y - 900.0))
+			if web_position.distance_to(start) > 900.0:
+				break
+		var web := SpiderWeb.new()
+		web.position = web_position
+		spider_webs.add_child(web)
+
+
+func destroy_spider_web(web: SpiderWeb, sliced: bool) -> void:
+	if not is_instance_valid(web):
+		return
+	if web == player_stuck_web:
+		player_stuck_web = null
+	for bot_node in bot_swings.get_children():
+		if bot_node.has_meta("stuck_web") and bot_node.get_meta("stuck_web") == web:
+			bot_node.remove_meta("stuck_web")
+	if sliced:
+		play_sfx(action_sound_player)
+		bat_kills += 1
+		update_kill_counter()
+		show_power_message("WEB SLICED!")
+	spider_webs.remove_child(web)
+	web.queue_free()
+
+
+func update_spider_webs(delta: float) -> void:
+	if not spider_webs or spider_webs.get_child_count() == 0:
+		return
+	var jelly_center := get_player_center()
+	for web_node in spider_webs.get_children():
+		var web := web_node as SpiderWeb
+		if not web:
+			continue
+		var web_center := web.global_position
+		# Spinning knives slice the web and the spider.
+		if knife_time > 0.0 and web_center.distance_to(jelly_center) < SpiderWeb.RADIUS + 70.0:
+			destroy_spider_web(web, true)
+			continue
+		if bot_has_active_knife_near(web_center):
+			destroy_spider_web(web, web_center.distance_to(jelly_center) < 900.0)
+			continue
+		if web.victim == null or not is_instance_valid(web.victim):
+			web.victim = null
+			if player_stuck_web == null and revive_shield_time <= 0.0 and has_player_contact(web_center, SpiderWeb.RADIUS * 0.8):
+				web.victim = block
+				web.struggle = 0
+				player_stuck_web = web
+				show_power_message("STUCK IN A WEB! TAP FAST TO ESCAPE!")
+			else:
+				for bot_node in bot_swings.get_children():
+					var bot := bot_node as Node2D
+					if bot and not bot.has_meta("stuck_web") and bot.global_position.distance_squared_to(web_center) < pow(SpiderWeb.RADIUS * 0.8, 2.0):
+						web.victim = bot
+						bot.set_meta("stuck_web", web)
+						break
+			continue
+		# Something is stuck: hold it still while the spider crawls down.
+		var target_local := Vector2.ZERO
+		if web.victim == block:
+			block.position = web_center - block.size / 2.0
+			velocity = Vector2.ZERO
+			is_swinging = false
+			swing_anchor = null
+			swing_rope.hide()
+		if web.crawl_toward(target_local, delta):
+			if web.victim == block:
+				player_stuck_web = null
+				web.victim = null
+				show_power_message("THE SPIDER ATE YOU!")
+				end_game()
+				return
+			var eaten := web.victim as Node2D
+			web.victim = null
+			if is_instance_valid(eaten) and eaten.get_parent() == bot_swings:
+				if web_center.distance_to(jelly_center) < 900.0:
+					show_power_message("THE SPIDER ATE %s!" % str(eaten.get_meta("name", "A JELLY")))
+				bot_swings.remove_child(eaten)
+				eaten.queue_free()
 
 
 func defeat_bat(bat: Sprite2D) -> void:
@@ -3347,6 +3554,9 @@ func revive_player() -> void:
 			bat.set_meta("chasing", false)
 			bat.set_meta("chase_started_at", -1.0)
 			bat.set_meta("ignore_until", world_elapsed + REVIVE_SHIELD_SECONDS + 1.0)
+	if is_instance_valid(player_stuck_web):
+		destroy_spider_web(player_stuck_web, false)
+	player_stuck_web = null
 	previous_player_center = get_player_center()
 	revive_shield_time = REVIVE_SHIELD_SECONDS
 	game_over = false
@@ -4698,6 +4908,15 @@ func _input(event: InputEvent) -> void:
 
 
 func start_hold() -> void:
+
+	if is_instance_valid(player_stuck_web) and game_started and not game_over:
+		player_stuck_web.struggle += 1
+		if player_stuck_web.struggle >= WEB_ESCAPE_TAPS:
+			destroy_spider_web(player_stuck_web, false)
+			player_stuck_web = null
+			velocity = Vector2(0.0, -900.0)
+			show_power_message("YOU BROKE FREE!")
+		return
 
 	is_pointer_held = true
 

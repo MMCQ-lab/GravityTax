@@ -21,6 +21,9 @@ var _pause_mode := false
 var _credits_button: Button
 var _credits_layer: Control
 var credits_text := ""
+var version_log_text := ""
+var _whats_new_button: Button
+var _layer_title: Label
 func _init() -> void:
 	layer = 120
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -115,6 +118,15 @@ func _ready() -> void:
 	_credits_button.pressed.connect(_show_credits)
 	_card.add_child(_credits_button)
 
+	_whats_new_button = Button.new()
+	_whats_new_button.text = "WHAT'S NEW"
+	_whats_new_button.flat = true
+	_whats_new_button.add_theme_font_size_override("font_size", 18)
+	_whats_new_button.add_theme_color_override("font_color", CuteStyle.ACCENT)
+	_whats_new_button.add_theme_color_override("font_hover_color", CuteStyle.INK)
+	_whats_new_button.pressed.connect(_show_version_log)
+	_card.add_child(_whats_new_button)
+
 	# Full-screen scrolling credits (engine licence and asset attributions).
 	_credits_layer = ColorRect.new()
 	(_credits_layer as ColorRect).color = CuteStyle.CREAM
@@ -139,6 +151,7 @@ func _ready() -> void:
 	scroll.add_child(credits_label)
 	var credits_title := Label.new()
 	credits_title.text = "CREDITS"
+	_layer_title = credits_title
 	credits_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	credits_title.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
 	credits_title.offset_top = 36.0
@@ -193,8 +206,10 @@ func open(pause_mode: bool, music: float, sfx: float, muted: bool, player_name: 
 	_card.offset_right = 280.0
 	_card.offset_top = -card_height * 0.5
 	_card.offset_bottom = card_height * 0.5
-	_credits_button.position = Vector2(80.0, card_height - 66.0)
-	_credits_button.size = Vector2(400.0, 44.0)
+	_whats_new_button.position = Vector2(30.0, card_height - 66.0)
+	_whats_new_button.size = Vector2(200.0, 44.0)
+	_credits_button.position = Vector2(230.0, card_height - 66.0)
+	_credits_button.size = Vector2(300.0, 44.0)
 	_credits_layer.hide()
 	# Set values without echoing change events back to the game.
 	_music_slider.set_value_no_signal(music)
@@ -233,5 +248,17 @@ func _emit_name() -> void:
 
 
 func _show_credits() -> void:
-	(_credits_layer.find_child("CreditsText", true, false) as Label).text = credits_text
+	_show_text_page("CREDITS", credits_text)
+
+
+func _show_version_log() -> void:
+	_show_text_page("WHAT'S NEW", version_log_text)
+
+
+func _show_text_page(title: String, text: String) -> void:
+	_layer_title.text = title
+	(_credits_layer.find_child("CreditsText", true, false) as Label).text = text
+	var scroll := _credits_layer.find_child("CreditsText", true, false).get_parent() as ScrollContainer
+	if scroll:
+		scroll.scroll_vertical = 0
 	_credits_layer.show()
