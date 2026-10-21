@@ -176,6 +176,9 @@ var climb_level := 1
 # Spider webs appear in Sky Climb from level 2.
 var spider_webs: Node2D
 var player_stuck_web: SpiderWeb = null
+# Floating "IT 23" badges over every IT jelly, plus a big banner when you are IT.
+var tag_badges: Node2D
+var it_banner: Label
 const WEB_ESCAPE_TAPS := 8
 var climb_height_bank := 0
 
@@ -485,7 +488,9 @@ const TAG_WIN_BONUS := 50
 const TAG_BOT_SPEED_CAP := 1300.0
 var tag_ai_timer := 0.0
 var tag_round_won := false
-const TAG_TIMEOUT_SECONDS := 15.0
+const TAG_TIMEOUT_SECONDS := 30.0
+const TAG_DANGER_SECONDS := 8.0
+const TAG_BADGE_COLOR := Color("ff4d5e")
 const TAG_HOLDER_COUNT := 4
 
 var background_music_player: AudioStreamPlayer
@@ -644,6 +649,7 @@ func _ready() -> void:
 	power_message.hide()
 
 	setup_orbiting_knives()
+	build_tag_badges()
 	spider_webs = Node2D.new()
 	spider_webs.name = "SpiderWebs"
 	add_child(spider_webs)
@@ -931,6 +937,12 @@ func build_pause_and_settings() -> void:
 
 
 const VERSION_LOG: Array[Dictionary] = [
+	{"version": "1.0.3", "notes": [
+		"Jelly Tag rounds give 30 seconds to pass the tag (up from 15).",
+		"Much easier to see who's IT: a red IT badge with a countdown floats over every IT jelly.",
+		"A big banner tells you when YOU are IT and how long you have left.",
+		"Spiders are much more common from Sky Climb level 2.",
+	]},
 	{"version": "1.0.2", "notes": [
 		"Sky Climb jellies that reach the top move on to the next level.",
 		"Bats now chase the other jellies too.",
@@ -2847,16 +2859,88 @@ func update_tag_status() -> void:
 	if active_game_mode != "TAG":
 		return
 	var holder_lines: Array[String] = []
+	var holders_sorted: Array[Node] = []
 	for holder in tag_holders:
-		if not is_instance_valid(holder):
+		if is_instance_valid(holder):
+			holders_sorted.append(holder)
+	holders_sorted.sort_custom(func(a: Node, b: Node) -> bool: return float(tag_times.get(a, 0.0)) > float(tag_times.get(b, 0.0)))
+	for holder in holders_sorted:
+		var holder_name := ("%s (YOU)" % display_player_name() if not player_name.is_empty() else "YOU") if holder == block else str(holder.get_meta("name", "RACER"))
+		holder_lines.append("%s  %ds" % [holder_name, tag_seconds_left(holder)])
+	tag_status_label.text = "WHO'S IT\n%s" % "\n".join(holder_lines)
+	tag_status_label.modulate = Color.WHITE
+	update_tag_badges()
+
+
+func tag_seconds_left(holder: Node) -> int:
+	return maxi(0, ceili(TAG_TIMEOUT_SECONDS - float(tag_times.get(holder, 0.0))))
+
+
+func build_tag_badges() -> void:
+	tag_badges = Node2D.new()
+	tag_badges.name = "TagBadges"
+	tag_badges.z_index = 20
+	tag_badges.visible = false
+	add_child(tag_badges)
+	it_banner = Label.new()
+	it_banner.name = "ItBanner"
+	it_banner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	it_banner.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	it_banner.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	it_banner.offset_left = -250.0
+	it_banner.offset_right = 250.0
+	it_banner.offset_top = 330.0
+	it_banner.offset_bottom = 450.0
+	CuteStyle.style_label(it_banner, CuteStyle.WHITE, 34, Color("7a1020"), 8)
+	it_banner.add_theme_stylebox_override("normal", CuteStyle.box(TAG_BADGE_COLOR, 30, CuteStyle.WHITE, 5, 0.25))
+	it_banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	it_banner.hide()
+	$HUD.add_child(it_banner)
+
+
+func _make_tag_badge() -> Label:
+	var badge := Label.new()
+	badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	badge.size = Vector2(112.0, 40.0)
+	CuteStyle.style_label(badge, CuteStyle.WHITE, 24, Color("7a1020"), 6)
+	badge.add_theme_stylebox_override("normal", CuteStyle.box(TAG_BADGE_COLOR, 20, CuteStyle.WHITE, 3))
+	tag_badges.add_child(badge)
+	return badge
+
+
+func update_tag_badges() -> void:
+	# One "IT 23" badge floats over each IT jelly; it flashes when time is short.
+	var holders: Array[Node] = []
+	for holder in tag_holders:
+		if is_instance_valid(holder) and (holder == block or holder.get_parent() == bot_swings):
+			holders.append(holder)
+	while tag_badges.get_child_count() < holders.size():
+		_make_tag_badge()
+	var flash := sin(world_elapsed * 14.0) > 0.0
+	for index in range(tag_badges.get_child_count()):
+		var badge := tag_badges.get_child(index) as Label
+		if index >= holders.size():
+			badge.hide()
 			continue
-		var holder_name := display_player_name() if holder == block else str(holder.get_meta("name", "RACER"))
-		var seconds_left := maxi(0, ceili(TAG_TIMEOUT_SECONDS - float(tag_times.get(holder, 0.0))))
-		holder_lines.append("%s  %ds" % [holder_name, seconds_left])
-	tag_status_label.text = "IT PLAYERS (%d)
-%s" % [tag_holders.size(), "
-".join(holder_lines)]
-	tag_status_label.modulate = Color("ffdf83")
+		var holder := holders[index]
+		var seconds := tag_seconds_left(holder)
+		var anchor_point := get_player_center() if holder == block else (holder as Node2D).global_position
+		badge.text = "IT %d" % seconds
+		badge.position = anchor_point + Vector2(-56.0, -112.0 if holder == block else -108.0)
+		badge.scale = Vector2.ONE * (1.15 if seconds <= TAG_DANGER_SECONDS and flash else 1.0)
+		badge.pivot_offset = badge.size / 2.0
+		badge.modulate = Color(1.0, 1.0, 0.4) if seconds <= TAG_DANGER_SECONDS and flash else Color.WHITE
+		badge.show()
+	# Big banner whenever the player is IT.
+	if tag_holders.has(block) and game_started and not game_over:
+		var mine := tag_seconds_left(block)
+		it_banner.text = ("YOU'RE IT!\n%ds  TAG SOMEONE!" % mine) if mine > TAG_DANGER_SECONDS else ("HURRY!\nONLY %ds LEFT!" % mine)
+		it_banner.scale = Vector2.ONE * (1.08 if mine <= TAG_DANGER_SECONDS and flash else 1.0)
+		it_banner.pivot_offset = it_banner.size / 2.0
+		it_banner.show()
+	else:
+		it_banner.hide()
 
 
 func update_tag_glows() -> void:
@@ -3258,17 +3342,20 @@ func clear_spider_webs() -> void:
 
 
 func spider_web_count() -> int:
-	return mini(3 + (climb_level - 2) * 2, 10)
+	return mini(9 + (climb_level - 2) * 3, 20)
 
 
 func spawn_spider_webs() -> void:
-	var start := get_start_pad_position()
-	for web_index in range(spider_web_count()):
-		var web_position := Vector2.ZERO
-		for attempt in range(12):
-			web_position = Vector2(randf_range(170.0, map_width - 170.0), randf_range(900.0, floor_y - 900.0))
-			if web_position.distance_to(start) > 900.0:
-				break
+	# Spread webs evenly up the level (one per band) so they keep showing up.
+	var count := spider_web_count()
+	var top := 700.0
+	var bottom := floor_y - 900.0
+	var band := (bottom - top) / float(count)
+	for web_index in range(count):
+		var web_position := Vector2(
+			randf_range(170.0, map_width - 170.0),
+			top + band * (float(web_index) + randf_range(0.15, 0.85))
+		)
 		var web := SpiderWeb.new()
 		web.position = web_position
 		spider_webs.add_child(web)
@@ -3609,6 +3696,8 @@ func start_game() -> void:
 	level_label.visible = active_game_mode == "CLIMB"
 
 	tag_status_label.visible = active_game_mode == "TAG"
+	tag_badges.visible = active_game_mode == "TAG"
+	it_banner.hide()
 
 	# The coin leaderboard only applies to the score-chasing mode.
 	leaderboard_panel.visible = active_game_mode == "COIN"
@@ -3733,6 +3822,9 @@ func restart_game() -> void:
 
 
 func return_to_main_menu() -> void:
+
+	tag_badges.visible = false
+	it_banner.hide()
 
 	game_started = false
 
