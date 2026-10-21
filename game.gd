@@ -375,6 +375,9 @@ var chest_reroll_used := false
 var chest_claim_button: Button
 var chest_reroll_button: Button
 var banner_ad: PlaceholderBanner
+var ad_manager: JellyAdManager
+var pending_reward_action := ""
+var reward_action_completed := false
 var chest_carousel_items: Array[TextureButton] = []
 
 var chest_carousel_target_index := 24
@@ -413,13 +416,14 @@ var world_elapsed := 0.0
 
 var game_over := false
 
-# Death flow: lucky spin, one ad-funded continue per run, and a placeholder
-# interstitial every few game overs. No ad SDK is wired up yet.
+# Death flow: lucky spin, one continue per run, and a standard interstitial
+# opportunity after every third finalized death.
 const INTERSTITIAL_EVERY_GAME_OVERS := 3
 const REVIVE_SHIELD_SECONDS := 3.0
 var revive_shield_time := 0.0
 var continue_used_this_run := false
 var game_overs_since_ad := 0
+var game_over_finalized := false
 var ad_audio_muted := false
 
 # Gameplay sprites were authored at 1254px but are drawn at 30-100px. They are
@@ -666,6 +670,18 @@ func _ready() -> void:
 	coins_tab_button.pressed.connect(set_shop_tab.bind("coins"))
 
 	ad_reward_button.pressed.connect(claim_test_ad_reward)
+	ad_manager = JellyAdManager.new()
+	add_child(ad_manager)
+	ad_manager.reward_earned.connect(_on_admob_reward_earned)
+	ad_manager.rewarded_finished.connect(_on_admob_rewarded_finished)
+	ad_manager.fullscreen_started.connect(func() -> void:
+		ad_audio_muted = true
+		apply_audio_settings()
+	)
+	ad_manager.fullscreen_finished.connect(func() -> void:
+		ad_audio_muted = false
+		apply_audio_settings()
+	)
 
 	skin_scroll.scroll_deadzone = 8
 
@@ -1202,7 +1218,10 @@ func _process(delta: float) -> void:
 	if banner_ad:
 		# Banner only on menu-style screens, never over active gameplay.
 		# Main menu and game over only: the shop is too dense to share space with it.
-		banner_ad.visible = (start_screen.visible or game_over_screen.visible) and not shop_screen.visible
+		var banner_should_show := (start_screen.visible or game_over_screen.visible) and not shop_screen.visible
+		# On iOS the real AdMob banner replaces the placeholder strip.
+		banner_ad.visible = banner_should_show and not OS.has_feature("ios")
+		ad_manager.set_banner_visible(banner_should_show)
 	if pause_button:
 		pause_button.visible = game_started and not game_over and not get_tree().paused
 	if not chest_rolling:
@@ -3084,6 +3103,9 @@ func _on_death_wheel_finished(coins: int, revive: bool) -> void:
 
 
 func finalize_game_over() -> void:
+	if game_over_finalized:
+		return
+	game_over_finalized = true
 	var won_tag := active_game_mode == "TAG" and tag_round_won
 	var game_over_title := game_over_screen.get_node("GameOver") as Label
 	if won_tag:
@@ -3126,7 +3148,8 @@ func finalize_game_over() -> void:
 	game_overs_since_ad += 1
 	if game_overs_since_ad >= INTERSTITIAL_EVERY_GAME_OVERS:
 		game_overs_since_ad = 0
-		show_placeholder_ad(Callable())
+		# Results are already visible. A missing ad or cooldown never blocks them.
+		ad_manager.try_show_death_interstitial()
 
 
 
@@ -3151,6 +3174,11 @@ func show_placeholder_ad(on_closed: Callable) -> void:
 
 func _on_continue_pressed() -> void:
 	if continue_used_this_run:
+		return
+	if OS.has_feature("ios"):
+		if _request_native_reward("continue"):
+			continue_used_this_run = true
+			continue_button.hide()
 		return
 	continue_used_this_run = true
 	continue_button.hide()
@@ -3187,6 +3215,7 @@ func revive_player() -> void:
 	previous_player_center = get_player_center()
 	revive_shield_time = REVIVE_SHIELD_SECONDS
 	game_over = false
+	game_over_finalized = false
 	show_power_message("REVIVED!")
 	play_sfx(revive_sound_player)
 	if not background_music_player.playing:
@@ -3248,6 +3277,7 @@ func start_game() -> void:
 func restart_game() -> void:
 
 	game_over = false
+	game_over_finalized = false
 
 	continue_used_this_run = false
 
@@ -3973,9 +4003,13 @@ func open_selected_chest() -> void:
 
 
 func claim_test_ad_reward() -> void:
-	# Rewarded placeholder: coins are only granted after the ad is closed.
 	if ad_reward_button.disabled:
 		return
+	if OS.has_feature("ios"):
+		if not _request_native_reward("coins"):
+			ad_status_label.text = "AD UNAVAILABLE — TRY AGAIN LATER"
+		return
+	# The existing local/web placeholder remains a non-native test flow.
 	ad_reward_button.disabled = true
 	show_placeholder_ad(func() -> void:
 		ad_reward_button.disabled = false
@@ -3985,6 +4019,48 @@ func claim_test_ad_reward() -> void:
 		update_coin_counter()
 		build_skin_shop()
 	)
+
+
+func _request_native_reward(action: String) -> bool:
+	if not pending_reward_action.is_empty():
+		return false
+	pending_reward_action = action
+	reward_action_completed = false
+	if not ad_manager.try_show_rewarded():
+		pending_reward_action = ""
+		return false
+	if action == "coins":
+		ad_reward_button.disabled = true
+	return true
+
+
+func _on_admob_reward_earned() -> void:
+	if pending_reward_action.is_empty() or reward_action_completed:
+		return
+	reward_action_completed = true
+	match pending_reward_action:
+		"coins":
+			wallet_coins += 10
+			ad_status_label.text = "+10 COINS ADDED!"
+			save_profile()
+			update_coin_counter()
+			build_skin_shop()
+		"continue":
+			revive_player()
+		"reroll":
+			_complete_chest_reroll()
+
+
+func _on_admob_rewarded_finished() -> void:
+	ad_reward_button.disabled = false
+	chest_reroll_button.disabled = false
+	if pending_reward_action == "continue" and not reward_action_completed:
+		continue_used_this_run = false
+		continue_button.visible = game_over and active_game_mode != "TAG"
+	elif pending_reward_action == "coins" and not reward_action_completed:
+		ad_status_label.text = "NO COINS AWARDED"
+	pending_reward_action = ""
+	reward_action_completed = false
 
 
 
@@ -4197,26 +4273,35 @@ func reroll_pending_chest() -> void:
 	# One ad-funded reroll per chest; it always lands on a different Jelly.
 	if chest_pending_skin < 0 or chest_reroll_used or chest_rolling:
 		return
-	var candidates := chest_reroll_candidates()
-	if candidates.is_empty():
+	if chest_reroll_candidates().is_empty():
+		return
+	if OS.has_feature("ios"):
+		_request_native_reward("reroll")
 		return
 	chest_reroll_button.disabled = true
 	show_placeholder_ad(func() -> void:
 		chest_reroll_button.disabled = false
-		chest_reroll_used = true
-		chest_pending_skin = -1
-		chest_target_skin = candidates.pick_random()
-		chest_roll_elapsed = 0.0
-		chest_next_tick = 0.0
-		chest_rolling = true
-		chest_claim_button.hide()
-		chest_reroll_button.hide()
-		shop_back_button.disabled = true
-		play_sfx(swoosh_sound_player)
-		prepare_chest_carousel(chest_reward_pool, chest_target_skin)
-		chest_carousel_backdrop.show()
-		chest_carousel.show()
+		_complete_chest_reroll()
 	)
+
+
+func _complete_chest_reroll() -> void:
+	var candidates := chest_reroll_candidates()
+	if candidates.is_empty():
+		return
+	chest_reroll_used = true
+	chest_pending_skin = -1
+	chest_target_skin = candidates.pick_random()
+	chest_roll_elapsed = 0.0
+	chest_next_tick = 0.0
+	chest_rolling = true
+	chest_claim_button.hide()
+	chest_reroll_button.hide()
+	shop_back_button.disabled = true
+	play_sfx(swoosh_sound_player)
+	prepare_chest_carousel(chest_reward_pool, chest_target_skin)
+	chest_carousel_backdrop.show()
+	chest_carousel.show()
 
 
 
