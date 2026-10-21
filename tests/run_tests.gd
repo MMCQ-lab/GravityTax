@@ -79,6 +79,9 @@ func _run() -> void:
 	await test_tag_ai()
 	await test_banner_never_covers_buttons()
 	await test_ad_layout_and_feedback()
+	await test_player_name()
+	await test_bouncy_walls()
+	await test_climb_bots()
 	clear_save_files()
 	print("\n%d passed, %d failed" % [passes, failures])
 	quit(1 if failures > 0 else 0)
@@ -439,3 +442,46 @@ func test_ad_layout_and_feedback() -> void:
 	game.show_toast("Ad not ready yet. Try again in a moment!")
 	check("toast message shows", game.toast_label.visible and game.toast_label.text.begins_with("Ad not ready"))
 	check("no native ads off-device", not game.ad_manager.native_available and not game.ad_manager.is_rewarded_ready())
+
+
+func test_player_name() -> void:
+	check("name is cleaned and shortened", game.sanitize_player_name("  mat<>thew  the great!! ") == "MATTHEW THE")
+	game.set_player_name("Matt")
+	check("name shows on the leaderboard", game.display_player_name() == "MATT")
+	await spawn_game()
+	check("name survives a restart", game.player_name == "MATT")
+	game.set_player_name("")
+	check("blank name falls back to YOU", game.display_player_name() == "YOU")
+
+
+func test_bouncy_walls() -> void:
+	game.select_game_mode("COIN")
+	game.revive_shield_time = 999.0
+	game.is_swinging = false
+	game.block.position.x = -5.0
+	game.velocity = Vector2(-60.0, 0.0)
+	await physics_frame
+	await physics_frame
+	print("   wall test: started=%s x=%.1f vx=%.1f" % [game.game_started, game.block.position.x, game.velocity.x])
+	check("side walls bounce Jelly back hard", game.velocity.x >= game.WALL_MIN_REBOUND * 0.9)
+	game.return_to_main_menu()
+
+
+func test_climb_bots() -> void:
+	game.select_game_mode("CLIMB")
+	var start_y := {}
+	for bot in game.bot_swings.get_children():
+		start_y[bot] = bot.global_position.y
+	var best_climb := 0.0
+	for frame in range(480):
+		game.revive_shield_time = 999.0
+		game.velocity = Vector2.ZERO
+		await physics_frame
+		if game.game_over:
+			break
+		for bot in game.bot_swings.get_children():
+			if start_y.has(bot):
+				best_climb = maxf(best_climb, float(start_y[bot]) - bot.global_position.y)
+	print("   best bot climb in 8s: %d px" % int(best_climb))
+	check("Sky Climb bots climb well", best_climb > 700.0)
+	game.return_to_main_menu()
