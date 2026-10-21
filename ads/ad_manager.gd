@@ -18,7 +18,8 @@ signal reward_earned
 signal rewarded_finished
 signal fullscreen_started
 signal fullscreen_finished
-
+# Real banner height in screen pixels, so menus can make room for it.
+signal banner_height_changed(height_pixels: float)
 var native_available := false
 var _sdk: Admob
 var _initialized := false
@@ -63,6 +64,11 @@ func _ready() -> void:
 	_sdk.consent_form_dismissed.connect(_on_consent_form_dismissed)
 	_sdk.consent_form_failed_to_load.connect(_on_consent_failed)
 	_sdk.banner_ad_loaded.connect(_on_banner_loaded)
+	_sdk.banner_ad_size_measured.connect(func(info: AdInfo) -> void:
+		var measured := _sdk.get_banner_dimension_in_pixels(info.get_ad_id())
+		if measured.y > 0.0:
+			banner_height_changed.emit(measured.y)
+	)
 	_sdk.banner_ad_failed_to_load.connect(_on_banner_failed)
 	_sdk.interstitial_ad_loaded.connect(_on_interstitial_loaded)
 	_sdk.interstitial_ad_failed_to_load.connect(_on_interstitial_failed)
@@ -144,6 +150,9 @@ func _load_banner() -> void:
 
 func _on_banner_loaded(info: AdInfo, _response: ResponseInfo) -> void:
 	_banner_id = info.get_ad_id()
+	var banner_size := _sdk.get_banner_dimension_in_pixels(_banner_id)
+	if banner_size.y > 0.0:
+		banner_height_changed.emit(banner_size.y)
 	if _banner_visible:
 		_sdk.show_banner_ad(_banner_id)
 	else:
@@ -248,3 +257,7 @@ func _on_rewarded_show_failed(_info: AdInfo, _error: AdError) -> void:
 
 func _retry_later(callback: Callable) -> void:
 	get_tree().create_timer(LOAD_RETRY_SECONDS).timeout.connect(callback)
+
+
+func is_rewarded_ready() -> bool:
+	return native_available and _initialized and not _rewarded_id.is_empty() and not _rewarded_showing
