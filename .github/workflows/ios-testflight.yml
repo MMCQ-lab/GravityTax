@@ -174,18 +174,16 @@ jobs:
           echo "Marketing version: $MARKETING_VERSION, build: $BUILD_NUMBER"
           XCODE_PROJECT="$(find build/ios -name '*.xcodeproj' -print -quit)"
           SCHEME="$(xcodebuild -list -json -project "$XCODE_PROJECT" | /usr/bin/python3 -c 'import json,sys; print(json.load(sys.stdin)["project"]["schemes"][0])')"
+          # Signing goes on the app target only; Swift package targets (Google
+          # Mobile Ads, UMP) reject a provisioning profile set globally.
+          ruby scripts/set_ios_signing.rb "$XCODE_PROJECT" "$APPLE_TEAM_ID" "$APPLE_PROVISIONING_PROFILE_NAME" "$BUNDLE_ID"
           xcodebuild \
             -project "$XCODE_PROJECT" \
             -scheme "$SCHEME" \
             -configuration Release \
             -destination 'generic/platform=iOS' \
             -archivePath "$RUNNER_TEMP/JellySwing.xcarchive" \
-            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
-            PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID" \
-            CODE_SIGN_STYLE=Manual \
             CODE_SIGNING_ALLOWED=YES \
-            CODE_SIGN_IDENTITY='Apple Distribution' \
-            PROVISIONING_PROFILE_SPECIFIER="$APPLE_PROVISIONING_PROFILE_NAME" \
             CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
             MARKETING_VERSION="$MARKETING_VERSION" \
             clean archive
