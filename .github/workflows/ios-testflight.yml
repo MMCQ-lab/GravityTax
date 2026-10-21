@@ -80,8 +80,18 @@ jobs:
           use-dotnet: false
           include-templates: true
 
+      # The AdMob export plugin runs `ruby` with the xcodeproj gem to add the
+      # Google Mobile Ads Swift package. Pin a Ruby so `ruby` and the gem match.
+      - name: Set up Ruby for the AdMob export helper
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+
       - name: Install AdMob iOS package helper
-        run: gem install --user-install xcodeproj --no-document
+        run: |
+          set -euo pipefail
+          gem install xcodeproj --no-document
+          ruby -e 'require "xcodeproj"; puts "xcodeproj #{Xcodeproj::VERSION} OK with Ruby #{RUBY_VERSION} at #{RbConfig.ruby}"'
 
       - name: Decode signing certificate and provisioning profile
         env:
@@ -125,12 +135,19 @@ jobs:
           set -euo pipefail
           mkdir -p build/ios
           godot --headless --path "$GITHUB_WORKSPACE" --import
-          godot --headless --path "$GITHUB_WORKSPACE" --export-release "$EXPORT_PRESET" "build/ios/JellySwing.xcodeproj"
-          test -d build/ios/JellySwing.xcodeproj
-          # Fail before signing if the native plugin or Google SDK was omitted.
-          grep -R -q 'AdmobPlugin' build/ios/JellySwing.xcodeproj/project.pbxproj
-          grep -R -q 'GoogleMobileAds' build/ios/JellySwing.xcodeproj/project.pbxproj
-          grep -q 'GADApplicationIdentifier' build/ios/JellySwing/JellySwing-Info.plist
+          godot --headless --path "$GITHUB_WORKSPACE" --export-release "$EXPORT_PRESET" "build/ios/JellySwing.xcodeproj" 2>&1 | tee "$RUNNER_TEMP/godot-export.log"
+          # Fail before signing if the native plugin or Google SDK was omitted,
+          # and surface the plugin's own messages as annotations so the cause
+          # is visible on the run page without opening the full log.
+          report() {
+            echo "::error::$1"
+            grep -E 'SPM|Admob|AdMob|xcodeproj|ruby|ERROR' "$RUNNER_TEMP/godot-export.log" | grep -v 'savepack' | tail -25 | while IFS= read -r line; do echo "::error::export: ${line:0:300}"; done
+            exit 1
+          }
+          test -d build/ios/JellySwing.xcodeproj || report "Godot did not create the Xcode project"
+          grep -q 'AdmobPlugin' build/ios/JellySwing.xcodeproj/project.pbxproj || report "AdmobPlugin missing from Xcode project"
+          grep -q 'GoogleMobileAds' build/ios/JellySwing.xcodeproj/project.pbxproj || report "GoogleMobileAds Swift package missing from Xcode project"
+          grep -q 'GADApplicationIdentifier' build/ios/JellySwing/JellySwing-Info.plist || report "GADApplicationIdentifier missing from Info.plist"
 
       - name: Set an automatically incrementing build number
         id: build_number
