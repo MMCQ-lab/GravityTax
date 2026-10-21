@@ -517,7 +517,12 @@ var jump_cooldown_remaining := 0.0
 
 var floor_bounce: float = 0.46
 
-var wall_bounce: float = 0.36
+var wall_bounce: float = 0.9
+# Side walls are springy: anything hitting them leaves with at least this speed.
+const WALL_MIN_REBOUND := 420.0
+const PLAYER_NAME_MAX := 12
+var player_name := ""
+var wall_bounce_sound_next := 0.0
 
 var minimum_bounce_speed: float = 75.0
 
@@ -874,6 +879,7 @@ func build_pause_and_settings() -> void:
 	settings_panel.credits_text = build_credits_text()
 	add_child(settings_panel)
 	settings_panel.settings_changed.connect(_on_settings_changed)
+	settings_panel.name_changed.connect(set_player_name)
 	settings_panel.resume_requested.connect(resume_game)
 	settings_panel.home_requested.connect(func() -> void:
 		get_tree().paused = false
@@ -907,7 +913,7 @@ func build_pause_and_settings() -> void:
 	settings_button.add_theme_font_size_override("font_size", 20)
 	CuteStyle.style_button(settings_button, CuteStyle.LAVENDER)
 	settings_button.pressed.connect(func() -> void:
-		settings_panel.open(false, music_volume, sfx_volume, audio_muted)
+		settings_panel.open(false, music_volume, sfx_volume, audio_muted, player_name)
 	)
 	start_screen.add_child(settings_button)
 
@@ -949,7 +955,7 @@ func pause_game() -> void:
 	is_pointer_held = false
 	write_save()
 	get_tree().paused = true
-	settings_panel.open(true, music_volume, sfx_volume, audio_muted)
+	settings_panel.open(true, music_volume, sfx_volume, audio_muted, player_name)
 
 
 
@@ -1139,15 +1145,43 @@ func show_studio_intro() -> void:
 	logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	logo.set_anchors_preset(Control.PRESET_CENTER)
-	logo.position = Vector2(-155.0, -155.0)
-	logo.size = Vector2(310.0, 310.0)
+	logo.offset_left = -155.0
+	logo.offset_right = 155.0
+	logo.offset_top = -230.0
+	logo.offset_bottom = 80.0
 	backdrop.add_child(logo)
+	var studio_label := Label.new()
+	studio_label.name = "StudioName"
+	studio_label.text = "MMCQ-Lab™"
+	studio_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	studio_label.set_anchors_preset(Control.PRESET_CENTER)
+	studio_label.offset_left = -300.0
+	studio_label.offset_right = 300.0
+	studio_label.offset_top = 100.0
+	studio_label.offset_bottom = 160.0
+	studio_label.add_theme_font_size_override("font_size", 44)
+	studio_label.add_theme_color_override("font_color", Color.WHITE)
+	backdrop.add_child(studio_label)
+	# Green loading bar under the studio name.
+	var bar_back := Panel.new()
+	bar_back.set_anchors_preset(Control.PRESET_CENTER)
+	bar_back.offset_left = -200.0
+	bar_back.offset_right = 200.0
+	bar_back.offset_top = 200.0
+	bar_back.offset_bottom = 228.0
+	bar_back.add_theme_stylebox_override("panel", CuteStyle.box(Color(1.0, 1.0, 1.0, 0.14), 14))
+	backdrop.add_child(bar_back)
+	var bar_fill := Panel.new()
+	bar_fill.name = "LoadingBar"
+	bar_fill.position = Vector2(4.0, 4.0)
+	bar_fill.size = Vector2(0.0, 20.0)
+	bar_fill.add_theme_stylebox_override("panel", CuteStyle.box(Color("3ddc6a"), 10))
+	bar_back.add_child(bar_fill)
 	add_child(intro_layer)
-	# ColorRect is a CanvasItem, so its modulation also fades the logo child.
-	backdrop.modulate = Color(1.0, 1.0, 1.0, 0.0)
+	# Starts fully visible so it continues straight on from the boot splash.
 	var intro_tween := create_tween()
-	intro_tween.tween_property(backdrop, "modulate:a", 1.0, 0.28)
-	intro_tween.tween_interval(1.0)
+	intro_tween.tween_property(bar_fill, "size:x", 392.0, 1.4).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	intro_tween.tween_interval(0.2)
 	intro_tween.tween_property(backdrop, "modulate:a", 0.0, 0.35)
 	intro_tween.tween_callback(intro_layer.queue_free)
 
@@ -1442,13 +1476,15 @@ func _physics_process(delta: float) -> void:
 
 		block.position.x = 0.0
 
-		velocity.x = abs(velocity.x) * wall_bounce
+		velocity.x = maxf(abs(velocity.x) * wall_bounce, WALL_MIN_REBOUND)
+		_on_player_wall_bounce()
 
 	elif block.position.x + block.size.x > map_width:
 
 		block.position.x = map_width - block.size.x
 
-		velocity.x = -abs(velocity.x) * wall_bounce
+		velocity.x = -maxf(abs(velocity.x) * wall_bounce, WALL_MIN_REBOUND)
+		_on_player_wall_bounce()
 
 
 
@@ -1934,6 +1970,9 @@ func get_next_bot_anchor(from_position: Vector2, goal: Vector2 = Vector2.INF, fl
 	var best_anchor_position := from_position
 
 	var best_climb_score := INF
+	# If nothing higher is reachable (e.g. while falling), catch the nearest orb.
+	var fallback_position := from_position
+	var fallback_distance := INF
 
 	for anchor_node in swing_anchors.get_children():
 
@@ -1946,6 +1985,10 @@ func get_next_bot_anchor(from_position: Vector2, goal: Vector2 = Vector2.INF, fl
 		var distance := anchor.global_position.distance_to(from_position)
 
 		var climbs_upward := anchor.global_position.y < from_position.y - 35.0
+
+		if distance >= 105.0 and distance <= 460.0 and distance < fallback_distance:
+			fallback_distance = distance
+			fallback_position = anchor.global_position
 
 		if distance < 105.0 or distance > 460.0 or not climbs_upward:
 
@@ -1963,7 +2006,7 @@ func get_next_bot_anchor(from_position: Vector2, goal: Vector2 = Vector2.INF, fl
 
 			best_anchor_position = anchor.global_position
 
-	return best_anchor_position
+	return best_anchor_position if best_anchor_position != from_position else fallback_position
 
 
 
@@ -2232,8 +2275,8 @@ func update_swing_bots(delta: float) -> void:
 		bot.position += bot_velocity * delta
 		# In Tag, a racer that loses its rope tries to catch a new orb, as a
 		# player would, instead of always dropping into the lava.
-		if rope_cut and active_game_mode == "TAG" and not bot.has_meta("regrab_after") and not bot.has_meta("regrab_gave_up"):
-			bot.set_meta("regrab_after", world_elapsed + 0.5)
+		if rope_cut and (active_game_mode == "TAG" or active_game_mode == "CLIMB") and not bot.has_meta("regrab_after") and not bot.has_meta("regrab_gave_up"):
+			bot.set_meta("regrab_after", world_elapsed + (0.3 if active_game_mode == "CLIMB" else 0.5))
 		if rope_cut and bot.has_meta("regrab_after") and world_elapsed >= float(bot.get_meta("regrab_after")):
 			var regrab_anchor := get_next_bot_anchor(bot.global_position, tag_anchor_goal(bot))
 			var regrab_length := bot.global_position.distance_to(regrab_anchor)
@@ -2258,7 +2301,7 @@ func update_swing_bots(delta: float) -> void:
 
 			bot.set_meta("rope_cut", true)
 
-			show_power_message("ROPE CUT!")
+			show_power_message("YOU CUT %s'S ROPE!" % str(bot.get_meta("name", "RACER")))
 
 		if not rope_cut:
 
@@ -2276,20 +2319,29 @@ func update_swing_bots(delta: float) -> void:
 
 				tangential_velocity = Vector2(-rope_direction.y, rope_direction.x) * 75.0
 
-			bot_velocity = tangential_velocity + tangential_velocity.normalized() * swing_boost_per_second * 0.65 * delta
+			bot_velocity = tangential_velocity + tangential_velocity.normalized() * swing_boost_per_second * (1.0 if active_game_mode == "CLIMB" else 0.65) * delta
 
 
+
+			# Sky Climb racers fling themselves upward off a fast upswing and
+			# catch a higher orb, just like a skilled player.
+			if active_game_mode == "CLIMB" and world_elapsed - float(bot.get_meta("rope_attached_at")) > 0.35 and bot_velocity.y < -360.0 and _has_orb_above(bot.global_position):
+				rope_cut = true
+				bot.set_meta("rope_cut", true)
+				bot_velocity.y -= 180.0
+				bot.set_meta("regrab_after", world_elapsed + 0.25)
 
 			# Bots periodically throw their rope to a nearby purple orb.
 
-			if world_elapsed >= float(bot.get_meta("switch_at")):
+			elif world_elapsed >= float(bot.get_meta("switch_at")):
 				var next_anchor := get_next_bot_anchor(bot.global_position, tag_anchor_goal(bot), tag_holders.has(bot) == false and bot.has_meta("threat_pos"))
 
 				var next_rope_length := bot.global_position.distance_to(next_anchor)
 
 				# Never clamp a new rope: clamping was what visibly snapped bots across the map.
 
-				if next_rope_length >= 105.0 and next_rope_length <= 460.0:
+				var climb_ok := active_game_mode != "CLIMB" or next_anchor.y < anchor_position.y - 40.0
+				if climb_ok and next_rope_length >= 105.0 and next_rope_length <= 460.0:
 
 					anchor_position = next_anchor
 
@@ -2300,8 +2352,12 @@ func update_swing_bots(delta: float) -> void:
 					bot.set_meta("rope_length", rope_length)
 					bot.set_meta("rope_attached_at", world_elapsed)
 
-					var is_hunting := active_game_mode == "TAG" and tag_holders.has(bot)
-					bot.set_meta("switch_at", world_elapsed + (randf_range(1.2, 2.0) if is_hunting else randf_range(3.0, 5.0)))
+					bot.set_meta("switch_at", world_elapsed + bot_switch_delay(bot))
+
+				elif active_game_mode == "CLIMB":
+
+					# Nothing higher in reach yet: look again very soon.
+					bot.set_meta("switch_at", world_elapsed + 0.2)
 
 				else:
 
@@ -2331,13 +2387,13 @@ func update_swing_bots(delta: float) -> void:
 
 			bot.position.x = 24.0
 
-			bot_velocity.x = abs(bot_velocity.x) * wall_bounce
+			bot_velocity.x = maxf(abs(bot_velocity.x) * wall_bounce, WALL_MIN_REBOUND)
 
 		elif bot.position.x + 24.0 > map_width:
 
 			bot.position.x = map_width - 24.0
 
-			bot_velocity.x = -abs(bot_velocity.x) * wall_bounce
+			bot_velocity.x = -maxf(abs(bot_velocity.x) * wall_bounce, WALL_MIN_REBOUND)
 
 		if active_game_mode == "TAG":
 			bot_velocity = steer_tag_bot(bot, bot_velocity, rope_cut, delta)
@@ -2549,6 +2605,30 @@ func _has_orb_within(point: Vector2, radius: float) -> bool:
 
 
 
+func _has_orb_above(point: Vector2) -> bool:
+	for anchor_node in swing_anchors.get_children():
+		var anchor := anchor_node as Node2D
+		if not anchor or anchor.global_position.y > point.y - 60.0:
+			continue
+		var distance := anchor.global_position.distance_to(point)
+		if distance >= 110.0 and distance <= 430.0:
+			return true
+	return false
+
+
+func bot_switch_delay(bot: Node2D) -> float:
+	match active_game_mode:
+		"CLIMB":
+			return randf_range(0.15, 0.4)
+		"TAG":
+			if tag_holders.has(bot):
+				return randf_range(0.8, 1.4)
+			if bot.has_meta("threat_pos"):
+				return randf_range(0.9, 1.6)
+			return randf_range(2.0, 3.5)
+	return randf_range(3.0, 5.0)
+
+
 func steer_tag_bot(bot: Node2D, bot_velocity: Vector2, rope_cut: bool, delta: float) -> Vector2:
 	var goal := tag_anchor_goal(bot)
 	# A racer dangling slowly on a rope with somewhere to be leaps like Jelly
@@ -2557,7 +2637,7 @@ func steer_tag_bot(bot: Node2D, bot_velocity: Vector2, rope_cut: bool, delta: fl
 		if bot_velocity.length() < 140.0:
 			if not bot.has_meta("slow_since"):
 				bot.set_meta("slow_since", world_elapsed)
-			elif world_elapsed - float(bot.get_meta("slow_since")) > 1.2 and _has_orb_within(bot.global_position, 460.0):
+			elif world_elapsed - float(bot.get_meta("slow_since")) > 0.8 and _has_orb_within(bot.global_position, 460.0):
 				var leap_direction := (goal - bot.global_position).normalized()
 				if not tag_holders.has(bot):
 					leap_direction = -leap_direction
@@ -2579,18 +2659,20 @@ func steer_tag_bot(bot: Node2D, bot_velocity: Vector2, rope_cut: bool, delta: fl
 			# Hunters get bolder as their own IT timer runs down.
 			var urgency := 1.0 + clampf(float(tag_times.get(bot, 0.0)) / TAG_TIMEOUT_SECONDS, 0.0, 1.0)
 			if rope_cut:
-				bot_velocity += direction * 520.0 * urgency * delta
+				# Close in hard for the final pounce.
+				var pounce := 1.8 if to_target.length() < 280.0 else 1.0
+				bot_velocity += direction * 520.0 * urgency * pounce * delta
 			else:
 				bot_velocity += direction * 180.0 * urgency * delta
 				# Let go of the rope when the swing is flinging the bot at its target.
 				var speed := bot_velocity.length()
-				if speed > 380.0 and to_target.length() < 750.0 and bot_velocity.dot(direction) > speed * 0.6 and _has_orb_within(bot.global_position + direction * 250.0, 400.0):
+				if speed > 340.0 and to_target.length() < 750.0 and bot_velocity.dot(direction) > speed * 0.6 and _has_orb_within(bot.global_position + direction * 250.0, 400.0):
 					bot.set_meta("rope_cut", true)
 					# A hunter that lets go grabs a new orb shortly after, instead of falling.
 					bot.set_meta("regrab_after", world_elapsed + 0.55)
 	elif bot.has_meta("threat_pos"):
 		var away: Vector2 = (bot.global_position - Vector2(bot.get_meta("threat_pos"))).normalized()
-		bot_velocity += away * (260.0 if rope_cut else 120.0) * delta
+		bot_velocity += away * (380.0 if rope_cut else 170.0) * delta
 	if bot_velocity.length() > TAG_BOT_SPEED_CAP:
 		bot_velocity = bot_velocity.normalized() * TAG_BOT_SPEED_CAP
 	return bot_velocity
@@ -2611,7 +2693,7 @@ func bot_tag_transfers() -> void:
 			var prey := bot_node as Node2D
 			if not prey or prey == hunter or tag_holders.has(prey):
 				continue
-			if hunter.global_position.distance_squared_to(prey.global_position) > 64.0 * 64.0:
+			if hunter.global_position.distance_squared_to(prey.global_position) > 80.0 * 80.0:
 				continue
 			var index := tag_holders.find(hunter)
 			tag_holders[index] = prey
@@ -2621,7 +2703,9 @@ func bot_tag_transfers() -> void:
 			prey.set_meta("tag_ready_at", world_elapsed + 1.2)
 			if hunter.has_meta("tag_target"):
 				hunter.remove_meta("tag_target")
-			if prey.global_position.distance_to(get_player_center()) < 700.0:
+			choose_tag_chaser()
+			update_tag_glows()
+			if prey.global_position.distance_to(get_player_center()) < 900.0:
 				show_power_message("%s TAGGED %s!" % [str(hunter.get_meta("name", "RACER")), str(prey.get_meta("name", "RACER"))])
 			break
 
@@ -2636,10 +2720,10 @@ func try_tag_transfer(bot: Node2D) -> void:
 		return
 	if tag_holders.has(bot) and not tag_holders.has(block):
 		replace_tag_holder(bot, block)
-		show_power_message("YOU'RE IT!")
+		show_power_message("%s TAGGED YOU! YOU'RE IT!" % str(bot.get_meta("name", "RACER")))
 	elif tag_holders.has(block) and not tag_holders.has(bot):
 		replace_tag_holder(block, bot)
-		show_power_message("TAG PASSED!")
+		show_power_message("YOU TAGGED %s!" % str(bot.get_meta("name", "RACER")))
 
 
 func setup_tag_round() -> void:
@@ -2696,7 +2780,7 @@ func update_tag_status() -> void:
 		return
 	var holder_lines: Array[String] = []
 	for holder in tag_holders:
-		var holder_name := "YOU" if holder == block else str(holder.get_meta("name", "RACER"))
+		var holder_name := display_player_name() if holder == block else str(holder.get_meta("name", "RACER"))
 		var seconds_left := maxi(0, ceili(TAG_TIMEOUT_SECONDS - float(tag_times.get(holder, 0.0))))
 		holder_lines.append("%s  %ds" % [holder_name, seconds_left])
 	tag_status_label.text = "IT PLAYERS (%d)
@@ -2760,7 +2844,8 @@ func update_tag_mode(delta: float) -> void:
 	if tag_ai_timer <= 0.0:
 		tag_ai_timer = 0.25
 		assign_tag_targets()
-		bot_tag_transfers()
+	# Bots tag each other on touch, so check every frame (at most 4 x 12 pairs).
+	bot_tag_transfers()
 	update_tag_status()
 	update_tag_glows()
 
@@ -2838,7 +2923,7 @@ func bots_cut_ropes() -> void:
 
 					swing_anchor = null
 
-					show_power_message("BOT CUT YOUR ROPE!")
+					show_power_message("%s CUT YOUR ROPE!" % str(cutter.get_meta("name", "A JELLY")))
 
 					break
 
@@ -3595,9 +3680,39 @@ func update_coin_counter() -> void:
 
 
 
+func sanitize_player_name(raw: String) -> String:
+	# Letters, digits and spaces only, upper-cased and short enough for labels.
+	var cleaned := ""
+	for character in raw.strip_edges().to_upper():
+		var code := character.unicode_at(0)
+		if (code >= 65 and code <= 90) or (code >= 48 and code <= 57) or code == 32:
+			cleaned += character
+	while cleaned.contains("  "):
+		cleaned = cleaned.replace("  ", " ")
+	return cleaned.strip_edges().substr(0, PLAYER_NAME_MAX).strip_edges()
+
+
+func display_player_name() -> String:
+	return player_name if not player_name.is_empty() else "YOU"
+
+
+func set_player_name(raw: String) -> void:
+	player_name = sanitize_player_name(raw)
+	write_save()
+	if game_started and not game_over:
+		update_leaderboard()
+		update_tag_status()
+
+
+func _on_player_wall_bounce() -> void:
+	if world_elapsed >= wall_bounce_sound_next:
+		wall_bounce_sound_next = world_elapsed + 0.25
+		play_sfx(bounce_sound_player)
+
+
 func update_leaderboard() -> void:
 
-	var standings: Array[Dictionary] = [{"name": "YOU", "coins": coins_collected}]
+	var standings: Array[Dictionary] = [{"name": display_player_name(), "coins": coins_collected}]
 
 	for bot_node in bot_swings.get_children():
 
@@ -3673,6 +3788,7 @@ func write_save() -> void:
 	save_file.set_value("profile", "wallet_coins", wallet_coins)
 	save_file.set_value("profile", "selected_skin", selected_skin)
 	save_file.set_value("profile", "pending_chest_skin", chest_pending_skin)
+	save_file.set_value("profile", "player_name", player_name)
 	var saved_skin_ids: Array[String] = []
 	for skin_id in unlocked_skins:
 		saved_skin_ids.append(str(skin_id))
@@ -3721,6 +3837,7 @@ func load_profile() -> void:
 			if skin_id >= 0 and skin_id < skin_definitions.size() and not unlocked_skins.has(skin_id):
 				unlocked_skins.append(skin_id)
 		# A chest reward left unclaimed when the app closed is granted on launch.
+		player_name = sanitize_player_name(str(profile_file.get_value("profile", "player_name", "")))
 		var pending_from_save := int(profile_file.get_value("profile", "pending_chest_skin", -1))
 		if pending_from_save >= 0 and pending_from_save < skin_definitions.size() and not unlocked_skins.has(pending_from_save):
 			unlocked_skins.append(pending_from_save)
