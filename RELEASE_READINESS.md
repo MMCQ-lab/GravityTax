@@ -158,13 +158,13 @@ At your request the original jellies are kept, edited so they no longer read as 
 | #48 (Legendary) | Shadow Knight Jelly (dark bat-like cowl) | Shadow Knight Jelly | Black hood recoloured midnight teal |
 | #43 (Legendary) | Cosmic Knight Jelly (Iron Man red/gold) | Cosmic Knight Jelly | Armour recoloured teal and pale gold |
 
-The original images stay in git history. The source sprite sheet that still contains the old designs (`jelly_sprite_sheet_fixed.png`) is no longer referenced by the scene and is excluded from exports.
+The original images and the old source sprite sheet (`jelly_sprite_sheet_fixed.png`) have been deleted from the repo. They remain only in older git history.
 
 Lower-risk designs left as they are: #46 Star Mushroom (astronaut helmet with a star) and #47 Sky Knight (blue helmet with fins). Both read as generic. This is a judgement call, not legal advice.
 
 ### Unused assets (excluded from exports, not deleted)
 
-`images/epic_*_jelly.png` (10), `images/food_*_jelly.png` (5), `rare_animal_jellies.png`, `jelly_skin_catalog.png`, `jelly_sprite_sheet.png`, `jelly_sprites_preview.png`, `cute cube face.png`: 20 files, about 28.6 MB. Nothing in code or scenes references them. Delete them from the repo once you're happy (`jelly_sprite_sheet_fixed.png` is the source for the jelly sprites, so keep that one).
+**Deleted.** The 20 unused images (`images/epic_*_jelly.png`, `images/food_*_jelly.png`, the old sprite sheets, catalog and preview images) were removed from the repo, along with `jelly_sprite_sheet_fixed.png`.
 
 ## 10. Monetization readiness
 
