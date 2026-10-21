@@ -74,6 +74,10 @@ func _run() -> void:
 	await test_pause_and_settings()
 	await test_banner_visibility()
 	await test_sounds()
+	await test_power_up_sounds()
+	await test_tag_win()
+	await test_tag_ai()
+	await test_banner_never_covers_buttons()
 	clear_save_files()
 	print("\n%d passed, %d failed" % [passes, failures])
 	quit(1 if failures > 0 else 0)
@@ -178,9 +182,9 @@ func test_skin_catalogue() -> void:
 func test_death_spin_and_revive() -> void:
 	game.select_game_mode("COIN")
 	await wait(0.3)
-	var coins_before: int = game.wallet_coins
 	game.end_game()
 	await wait(0.1)
+	var coins_before: int = game.wallet_coins
 	var wheel: Node = child_of(PrizeWheel)
 	check("death opens the lucky spin", wheel != null and not game.game_over_screen.visible)
 	wheel.finished.emit(25, true)
@@ -231,10 +235,14 @@ func test_continue_and_interstitial() -> void:
 	game.end_game()
 	await wait(0.1)
 	wheel = child_of(PrizeWheel)
+	var wallet_before_third_death: int = game.wallet_coins
 	wheel.finished.emit(5, false)
 	wheel.queue_free()
 	await wait(0.1)
-	check("interstitial appears every 3rd game over", child_of(PlaceholderAd) != null)
+	check("third death reaches an interstitial opportunity", game.game_overs_since_ad == 0 and child_of(PlaceholderAd) == null)
+	check("standard interstitial grants no coins", game.wallet_coins == wallet_before_third_death + 5)
+	game.finalize_game_over()
+	check("same death cannot trigger twice", game.game_overs_since_ad == 0)
 	close_all_ads()
 	game.return_to_main_menu()
 
@@ -322,3 +330,94 @@ func test_sounds() -> void:
 	game.close_shop()
 	check("buttons created in code also click", game.settings_button.has_meta("tap_sound") and game.pause_button.has_meta("tap_sound"))
 	check("button clicks still work while paused", game.button_sound_player.process_mode == Node.PROCESS_MODE_ALWAYS)
+
+
+func test_power_up_sounds() -> void:
+	var all_play := true
+	for kind in ["rocket", "teleport", "magnet", "knife"]:
+		game.jetpack_sound_player.stop()
+		game.apply_power_up(kind)
+		if not game.jetpack_sound_player.playing:
+			all_play = false
+			print("   no sound for ", kind)
+	check("every power-up plays the pickup sound", all_play)
+
+
+func test_tag_win() -> void:
+	game.select_game_mode("TAG")
+	await wait(0.2)
+	var coins_before: int = game.wallet_coins
+	# Remove every other racer: Jelly is the last one standing, even if IT.
+	if not game.tag_holders.has(game.block) and not game.tag_holders.is_empty():
+		game.replace_tag_holder(game.tag_holders[0], game.block)
+	for bot in game.bot_swings.get_children():
+		game.bot_swings.remove_child(bot)
+		bot.queue_free()
+	await wait(0.2)
+	var title := game.game_over_screen.get_node("GameOver") as Label
+	check("last jelly standing wins Tag", game.game_over and game.tag_round_won and game.game_over_screen.visible)
+	check("win screen and bonus", title.text == "YOU WIN!" and game.wallet_coins == coins_before + game.TAG_WIN_BONUS)
+	check("no lucky spin or continue on a win", child_of(PrizeWheel) == null and not game.continue_button.visible)
+	game.return_to_main_menu()
+	await wait(0.1)
+	game.select_game_mode("COIN")
+	game.end_game()
+	await wait(0.1)
+	var wheel: Node = child_of(PrizeWheel)
+	wheel.finished.emit(5, false)
+	wheel.queue_free()
+	await wait(0.1)
+	check("normal game over still says OOPS!", title.text == "OOPS!")
+	close_all_ads()
+	game.return_to_main_menu()
+
+
+func test_tag_ai() -> void:
+	game.select_game_mode("TAG")
+	game.revive_shield_time = 999.0
+	var hunters_with_targets := 0
+	var bot_tags := 0
+	var previous: Array = game.tag_holders.duplicate()
+	for frame in range(600):
+		game.revive_shield_time = 999.0
+		game.tag_times[game.block] = 0.0
+		await physics_frame
+		if game.game_over:
+			break
+		for holder in game.tag_holders:
+			if holder != game.block and not previous.has(holder) and not previous.has(game.block) and not game.tag_holders.has(game.block):
+				bot_tags += 1
+		previous = game.tag_holders.duplicate()
+	for holder in game.tag_holders:
+		if holder != game.block and is_instance_valid(holder) and holder.has_meta("tag_target"):
+			hunters_with_targets += 1
+	check("IT bots pick targets to hunt", hunters_with_targets > 0)
+	var player_hunters := 0
+	for holder in game.tag_holders:
+		if holder != game.block and is_instance_valid(holder) and holder.has_meta("tag_target") and holder.get_meta("tag_target") == game.block:
+			player_hunters += 1
+	check("at most two bots hunt Jelly at once", player_hunters <= game.TAG_MAX_PLAYER_HUNTERS)
+	print("   bot-to-bot tag changes in 10s: ", bot_tags)
+	game.return_to_main_menu()
+
+
+func test_banner_never_covers_buttons() -> void:
+	# Simulate a phone/tablet with a big home-indicator inset and a notch.
+	await spawn_game()
+	game.safe_area_bottom = 70.0
+	game.banner_ad.set_bottom_inset(70.0)
+	game.fit_menus_above_banner()
+	var banner_top: float = game.get_viewport().get_visible_rect().size.y - PlaceholderBanner.HEIGHT - 70.0
+	var clear := true
+	for screen in [game.start_screen, game.game_over_screen]:
+		for button in screen.find_children("*", "BaseButton", true, false):
+			var control := button as Control
+			if true:
+				if control.get_global_rect().end.y > banner_top + 0.5:
+					clear = false
+					print("   under banner: ", control.name)
+	check("no menu or game-over button sits under the banner", clear)
+	game.open_shop()
+	await wait(0.1)
+	check("banner is hidden in the shop", not game.banner_ad.visible)
+	game.close_shop()

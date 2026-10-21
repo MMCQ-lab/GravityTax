@@ -375,6 +375,9 @@ var chest_reroll_used := false
 var chest_claim_button: Button
 var chest_reroll_button: Button
 var banner_ad: PlaceholderBanner
+var ad_manager: JellyAdManager
+var pending_reward_action := ""
+var reward_action_completed := false
 var chest_carousel_items: Array[TextureButton] = []
 
 var chest_carousel_target_index := 24
@@ -413,13 +416,14 @@ var world_elapsed := 0.0
 
 var game_over := false
 
-# Death flow: lucky spin, one ad-funded continue per run, and a placeholder
-# interstitial every few game overs. No ad SDK is wired up yet.
+# Death flow: lucky spin, one continue per run, and a standard interstitial
+# opportunity after every third finalized death.
 const INTERSTITIAL_EVERY_GAME_OVERS := 3
 const REVIVE_SHIELD_SECONDS := 3.0
 var revive_shield_time := 0.0
 var continue_used_this_run := false
 var game_overs_since_ad := 0
+var game_over_finalized := false
 var ad_audio_muted := false
 
 # Gameplay sprites were authored at 1254px but are drawn at 30-100px. They are
@@ -466,6 +470,13 @@ var tag_holders: Array[Node] = []
 var tag_times: Dictionary = {}
 var tag_chaser: Node2D
 var tag_transfer_cooldown_until := 0.0
+# Tag AI: each IT racer hunts a target; safe racers flee nearby IT racers.
+const TAG_HUNT_RADIUS := 2600.0
+const TAG_FLEE_RADIUS := 520.0
+const TAG_MAX_PLAYER_HUNTERS := 2
+const TAG_WIN_BONUS := 50
+const TAG_BOT_SPEED_CAP := 1300.0
+var tag_ai_timer := 0.0
 var tag_round_won := false
 const TAG_TIMEOUT_SECONDS := 15.0
 const TAG_HOLDER_COUNT := 4
@@ -659,6 +670,18 @@ func _ready() -> void:
 	coins_tab_button.pressed.connect(set_shop_tab.bind("coins"))
 
 	ad_reward_button.pressed.connect(claim_test_ad_reward)
+	ad_manager = JellyAdManager.new()
+	add_child(ad_manager)
+	ad_manager.reward_earned.connect(_on_admob_reward_earned)
+	ad_manager.rewarded_finished.connect(_on_admob_rewarded_finished)
+	ad_manager.fullscreen_started.connect(func() -> void:
+		ad_audio_muted = true
+		apply_audio_settings()
+	)
+	ad_manager.fullscreen_finished.connect(func() -> void:
+		ad_audio_muted = false
+		apply_audio_settings()
+	)
 
 	skin_scroll.scroll_deadzone = 8
 
@@ -717,6 +740,9 @@ func apply_cute_ui() -> void:
 	level_label.offset_top = 82.0
 	level_label.offset_bottom = 116.0
 	CuteStyle.pill_label(tag_status_label, Color(CuteStyle.PEACH, 0.95), CuteStyle.INK)
+	# Keep the IT list clear of the centred pause button.
+	tag_status_label.position.x = 420.0
+	tag_status_label.size.x = 280.0
 	CuteStyle.style_label(power_message, CuteStyle.ACCENT, 36, CuteStyle.WHITE, 10)
 	# Below the leaderboard so pop-up messages never cover it.
 	power_message.position.y = 245.0
@@ -982,10 +1008,42 @@ func apply_wide_layout() -> void:
 
 
 
+func fit_menus_above_banner() -> void:
+	# Whatever the screen shape, nothing tappable on the menu or shop may sit
+	# under the bottom banner: if the lowest control overlaps it, lift the
+	# screen's content just enough (never above the top safe area).
+	var canvas_height := get_viewport().get_visible_rect().size.y
+	var banner_top := canvas_height - PlaceholderBanner.HEIGHT - safe_area_bottom - 12.0
+	var skip_names := ["JellySky", "ReadabilityVeil", "CuteGradient", "CuteBackground", "SettingsButton"]
+	for screen in [start_screen]:
+		var lowest := -INF
+		var highest := INF
+		for child in screen.get_children():
+			if child is Control and not skip_names.has(str(child.name)):
+				var rect := (child as Control).get_rect()
+				lowest = maxf(lowest, rect.end.y)
+				highest = minf(highest, rect.position.y)
+		var overlap := lowest - banner_top
+		if overlap <= 0.0:
+			continue
+		var lift := minf(overlap, maxf(0.0, highest - safe_area_top - 8.0))
+		for child in screen.get_children():
+			if child is Control and not skip_names.has(str(child.name)):
+				(child as Control).position.y -= lift
+
+
+
+
+
 func apply_safe_area() -> void:
 	# Push HUD and screen headers below the notch / Dynamic Island, and lift the
 	# banner above the home indicator. Safe area is reported in screen pixels,
 	# so convert to the 720-wide game canvas.
+	# On desktop the "safe area" is the work area above the taskbar, which would
+	# wrongly push the banner up over the buttons, so only phones/tablets use it.
+	if not OS.has_feature("mobile"):
+		fit_menus_above_banner()
+		return
 	var safe_rect := DisplayServer.get_display_safe_area()
 	var screen_size := DisplayServer.screen_get_size()
 	var canvas_size := get_viewport().get_visible_rect().size
@@ -1003,6 +1061,7 @@ func apply_safe_area() -> void:
 		settings_button.position.y += safe_area_top
 	if banner_ad:
 		banner_ad.set_bottom_inset(safe_area_bottom)
+	fit_menus_above_banner()
 
 
 
@@ -1158,7 +1217,11 @@ func play_sfx(player: AudioStreamPlayer) -> void:
 func _process(delta: float) -> void:
 	if banner_ad:
 		# Banner only on menu-style screens, never over active gameplay.
-		banner_ad.visible = start_screen.visible or shop_screen.visible or game_over_screen.visible
+		# Main menu and game over only: the shop is too dense to share space with it.
+		var banner_should_show := (start_screen.visible or game_over_screen.visible) and not shop_screen.visible
+		# On iOS the real AdMob banner replaces the placeholder strip.
+		banner_ad.visible = banner_should_show and not OS.has_feature("ios")
+		ad_manager.set_banner_visible(banner_should_show)
 	if pause_button:
 		pause_button.visible = game_started and not game_over and not get_tree().paused
 	if not chest_rolling:
@@ -1784,8 +1847,26 @@ func spawn_swing_bot(anchor_position: Vector2, bot_number: int) -> void:
 
 
 
-func get_next_bot_anchor(from_position: Vector2) -> Vector2:
-
+func get_next_bot_anchor(from_position: Vector2, goal: Vector2 = Vector2.INF, flee: bool = false) -> Vector2:
+	if active_game_mode == "TAG" and goal != Vector2.INF:
+		# Tag racers swing purposefully: hunters toward their target, fleers away.
+		var best_position := from_position
+		var best_score := INF
+		for anchor_node in swing_anchors.get_children():
+			var tag_anchor := anchor_node as Sprite2D
+			if not tag_anchor:
+				continue
+			var reach := tag_anchor.global_position.distance_to(from_position)
+			if reach < 110.0 or reach > 460.0:
+				continue
+			var to_goal := tag_anchor.global_position.distance_to(goal)
+			var score := -to_goal if flee else to_goal
+			score += randf_range(0.0, 60.0)  # a little variety so racers don't move in lockstep
+			if score < best_score:
+				best_score = score
+				best_position = tag_anchor.global_position
+		if best_position != from_position:
+			return best_position
 	if active_game_mode != "CLIMB":
 
 		var coin_mode_candidates: Array[Sprite2D] = []
@@ -1886,17 +1967,12 @@ func collect_power_ups() -> void:
 
 
 func apply_power_up(kind: String) -> void:
-
 	is_swinging = false
-
 	swing_anchor = null
-
+	# Every power-up (rocket, warp, magnet, knives) plays the pickup sound.
+	play_sfx(jetpack_sound_player)
 	if kind == "rocket":
-
 		velocity = Vector2(velocity.x * 1.4, -1150.0)
-
-		play_sfx(jetpack_sound_player)
-
 		show_power_message("ROCKET BOOST!")
 
 	elif kind == "teleport":
@@ -2105,9 +2181,29 @@ func update_swing_bots(delta: float) -> void:
 		# The same gravity + tangential-rope physics used by Jelly.
 
 		bot_velocity.y += gravity * delta
-
 		bot.position += bot_velocity * delta
-
+		# In Tag, a racer that loses its rope tries to catch a new orb, as a
+		# player would, instead of always dropping into the lava.
+		if rope_cut and active_game_mode == "TAG" and not bot.has_meta("regrab_after") and not bot.has_meta("regrab_gave_up"):
+			bot.set_meta("regrab_after", world_elapsed + 0.5)
+		if rope_cut and bot.has_meta("regrab_after") and world_elapsed >= float(bot.get_meta("regrab_after")):
+			var regrab_anchor := get_next_bot_anchor(bot.global_position, tag_anchor_goal(bot))
+			var regrab_length := bot.global_position.distance_to(regrab_anchor)
+			if regrab_length >= 105.0 and regrab_length <= 460.0:
+				rope_cut = false
+				anchor_position = regrab_anchor
+				rope_length = regrab_length
+				bot.set_meta("rope_cut", false)
+				bot.set_meta("from_anchor", regrab_anchor)
+				bot.set_meta("rope_length", regrab_length)
+				bot.set_meta("rope_attached_at", world_elapsed)
+				bot.set_meta("switch_at", world_elapsed + randf_range(1.2, 2.0))
+				bot.remove_meta("regrab_after")
+				if bot.has_meta("regrab_gave_up"):
+					bot.remove_meta("regrab_gave_up")
+			elif world_elapsed - float(bot.get_meta("regrab_after")) > 2.5:
+				bot.remove_meta("regrab_after")
+				bot.set_meta("regrab_gave_up", true)
 		if not rope_cut and player_hits_bot_rope(anchor_position, bot.global_position):
 
 			rope_cut = true
@@ -2139,8 +2235,7 @@ func update_swing_bots(delta: float) -> void:
 			# Bots periodically throw their rope to a nearby purple orb.
 
 			if world_elapsed >= float(bot.get_meta("switch_at")):
-
-				var next_anchor := get_next_bot_anchor(bot.global_position)
+				var next_anchor := get_next_bot_anchor(bot.global_position, tag_anchor_goal(bot), tag_holders.has(bot) == false and bot.has_meta("threat_pos"))
 
 				var next_rope_length := bot.global_position.distance_to(next_anchor)
 
@@ -2157,7 +2252,8 @@ func update_swing_bots(delta: float) -> void:
 					bot.set_meta("rope_length", rope_length)
 					bot.set_meta("rope_attached_at", world_elapsed)
 
-					bot.set_meta("switch_at", world_elapsed + randf_range(3.0, 5.0))
+					var is_hunting := active_game_mode == "TAG" and tag_holders.has(bot)
+					bot.set_meta("switch_at", world_elapsed + (randf_range(1.2, 2.0) if is_hunting else randf_range(3.0, 5.0)))
 
 				else:
 
@@ -2195,11 +2291,9 @@ func update_swing_bots(delta: float) -> void:
 
 			bot_velocity.x = -abs(bot_velocity.x) * wall_bounce
 
-		if active_game_mode == "TAG" and tag_chaser == bot:
-
-			# One glowing IT racer actively hunts Jelly while the others keep swinging.
-
-			bot_velocity += (get_player_center() - bot.global_position).normalized() * 300.0 * delta
+		if active_game_mode == "TAG":
+			bot_velocity = steer_tag_bot(bot, bot_velocity, rope_cut, delta)
+			rope_cut = bool(bot.get_meta("rope_cut"))
 
 		bot.set_meta("velocity", bot_velocity)
 
@@ -2305,6 +2399,188 @@ func resolve_jelly_collisions() -> void:
 
 
 
+func tag_anchor_goal(bot: Node2D) -> Vector2:
+	if active_game_mode != "TAG":
+		return Vector2.INF
+	if tag_holders.has(bot):
+		var target = (bot.get_meta("tag_target") if bot.has_meta("tag_target") else null)
+		return racer_position(target as CanvasItem) if is_instance_valid(target) else Vector2.INF
+	if bot.has_meta("threat_pos"):
+		return bot.get_meta("threat_pos")
+	return Vector2.INF
+
+
+
+
+
+func racer_velocity(racer: CanvasItem) -> Vector2:
+	return velocity if racer == block else Vector2(racer.get_meta("velocity", Vector2.ZERO))
+
+
+
+
+
+func racer_position(racer: CanvasItem) -> Vector2:
+	return get_player_center() if racer == block else (racer as Node2D).global_position
+
+
+
+
+
+func assign_tag_targets() -> void:
+	# Every IT racer picks the closest safe racer to hunt. Jelly is a slightly
+	# preferred target, but at most two bots hunt Jelly at once so the player
+	# is pressured without being swarmed. Safe racers note the nearest threat.
+	var racers: Array[CanvasItem] = [block]
+	for bot_node in bot_swings.get_children():
+		if bot_node is Node2D:
+			racers.append(bot_node as CanvasItem)
+	var player_hunters := 0
+	var hunters: Array[Node2D] = []
+	for racer in racers:
+		if racer != block and tag_holders.has(racer):
+			hunters.append(racer as Node2D)
+	hunters.sort_custom(func(a: Node2D, b: Node2D) -> bool:
+		return a.global_position.distance_squared_to(get_player_center()) < b.global_position.distance_squared_to(get_player_center()))
+	for hunter in hunters:
+		var best: CanvasItem = null
+		var best_score := TAG_HUNT_RADIUS
+		for racer in racers:
+			if racer == hunter or tag_holders.has(racer):
+				continue
+			var score := hunter.global_position.distance_to(racer_position(racer))
+			if racer == block:
+				if player_hunters >= TAG_MAX_PLAYER_HUNTERS:
+					continue
+				score *= 0.65
+			if score < best_score:
+				best_score = score
+				best = racer
+		if best == block:
+			player_hunters += 1
+		if best:
+			hunter.set_meta("tag_target", best)
+		elif hunter.has_meta("tag_target"):
+			hunter.remove_meta("tag_target")
+	for racer in racers:
+		if racer == block:
+			continue
+		if tag_holders.has(racer):
+			if racer.has_meta("threat_pos"):
+				racer.remove_meta("threat_pos")
+			continue
+		var nearest_threat := Vector2.INF
+		var nearest_distance := TAG_FLEE_RADIUS
+		var safe_bot := racer as Node2D
+		for holder in tag_holders:
+			if not is_instance_valid(holder):
+				continue
+			var threat := holder as CanvasItem
+			var distance := safe_bot.global_position.distance_to(racer_position(threat))
+			if distance < nearest_distance:
+				nearest_distance = distance
+				nearest_threat = racer_position(threat)
+		if nearest_threat != Vector2.INF:
+			racer.set_meta("threat_pos", nearest_threat)
+		elif racer.has_meta("threat_pos"):
+			racer.remove_meta("threat_pos")
+
+
+
+
+
+func _has_orb_within(point: Vector2, radius: float) -> bool:
+	var radius_squared := radius * radius
+	for anchor_node in swing_anchors.get_children():
+		var anchor := anchor_node as Node2D
+		if anchor and anchor.global_position.distance_squared_to(point) <= radius_squared and anchor.global_position.distance_squared_to(point) >= 110.0 * 110.0:
+			return true
+	return false
+
+
+
+
+
+func steer_tag_bot(bot: Node2D, bot_velocity: Vector2, rope_cut: bool, delta: float) -> Vector2:
+	var goal := tag_anchor_goal(bot)
+	# A racer dangling slowly on a rope with somewhere to be leaps like Jelly
+	# does: a hop toward (or away from) its goal, then it grabs a new orb.
+	if not rope_cut and goal != Vector2.INF:
+		if bot_velocity.length() < 140.0:
+			if not bot.has_meta("slow_since"):
+				bot.set_meta("slow_since", world_elapsed)
+			elif world_elapsed - float(bot.get_meta("slow_since")) > 1.2 and _has_orb_within(bot.global_position, 460.0):
+				var leap_direction := (goal - bot.global_position).normalized()
+				if not tag_holders.has(bot):
+					leap_direction = -leap_direction
+				bot_velocity = Vector2(leap_direction.x * 650.0, minf(leap_direction.y * 650.0, 0.0) - 550.0)
+				bot.set_meta("rope_cut", true)
+				bot.set_meta("regrab_after", world_elapsed + 0.35)
+				bot.remove_meta("slow_since")
+				return bot_velocity
+		elif bot.has_meta("slow_since"):
+			bot.remove_meta("slow_since")
+	if tag_holders.has(bot):
+		var target_ref = (bot.get_meta("tag_target") if bot.has_meta("tag_target") else null)
+		if is_instance_valid(target_ref):
+			var target := target_ref as CanvasItem
+			# Aim where the target is going, not where it is.
+			var lead := racer_position(target) + racer_velocity(target) * 0.35
+			var to_target := lead - bot.global_position
+			var direction := to_target.normalized()
+			# Hunters get bolder as their own IT timer runs down.
+			var urgency := 1.0 + clampf(float(tag_times.get(bot, 0.0)) / TAG_TIMEOUT_SECONDS, 0.0, 1.0)
+			if rope_cut:
+				bot_velocity += direction * 520.0 * urgency * delta
+			else:
+				bot_velocity += direction * 180.0 * urgency * delta
+				# Let go of the rope when the swing is flinging the bot at its target.
+				var speed := bot_velocity.length()
+				if speed > 380.0 and to_target.length() < 750.0 and bot_velocity.dot(direction) > speed * 0.6 and _has_orb_within(bot.global_position + direction * 250.0, 400.0):
+					bot.set_meta("rope_cut", true)
+					# A hunter that lets go grabs a new orb shortly after, instead of falling.
+					bot.set_meta("regrab_after", world_elapsed + 0.55)
+	elif bot.has_meta("threat_pos"):
+		var away: Vector2 = (bot.global_position - Vector2(bot.get_meta("threat_pos"))).normalized()
+		bot_velocity += away * (260.0 if rope_cut else 120.0) * delta
+	if bot_velocity.length() > TAG_BOT_SPEED_CAP:
+		bot_velocity = bot_velocity.normalized() * TAG_BOT_SPEED_CAP
+	return bot_velocity
+
+
+
+
+
+func bot_tag_transfers() -> void:
+	# IT racers can now tag each other's safe racers, not just Jelly.
+	for holder in tag_holders.duplicate():
+		var hunter := holder as Node2D
+		if not is_instance_valid(hunter) or hunter == block:
+			continue
+		if world_elapsed < float(hunter.get_meta("tag_ready_at", 0.0)):
+			continue
+		for bot_node in bot_swings.get_children():
+			var prey := bot_node as Node2D
+			if not prey or prey == hunter or tag_holders.has(prey):
+				continue
+			if hunter.global_position.distance_squared_to(prey.global_position) > 64.0 * 64.0:
+				continue
+			var index := tag_holders.find(hunter)
+			tag_holders[index] = prey
+			tag_times.erase(hunter)
+			tag_times[prey] = 0.0
+			# The new IT racer can't instantly tag back.
+			prey.set_meta("tag_ready_at", world_elapsed + 1.2)
+			if hunter.has_meta("tag_target"):
+				hunter.remove_meta("tag_target")
+			if prey.global_position.distance_to(get_player_center()) < 700.0:
+				show_power_message("%s TAGGED %s!" % [str(hunter.get_meta("name", "RACER")), str(prey.get_meta("name", "RACER"))])
+			break
+
+
+
+
+
 func try_tag_transfer(bot: Node2D) -> void:
 	# Touching an IT racer makes Jelly IT. If Jelly is IT, touching a safe racer
 	# passes Jelly's tag to that racer.
@@ -2392,10 +2668,16 @@ func update_tag_glows() -> void:
 
 
 func update_tag_mode(delta: float) -> void:
-	for holder in tag_holders.duplicate():
-		if not is_instance_valid(holder) or holder.get_parent() != bot_swings and holder != block:
-			tag_holders.erase(holder)
-			tag_times.erase(holder)
+	# Drop racers that fell out or were freed (rebuild rather than erase, since
+	# erasing a freed object from a typed array is an engine error).
+	var still_in: Array[Node] = []
+	for holder in tag_holders:
+		if is_instance_valid(holder) and (holder == block or holder.get_parent() == bot_swings):
+			still_in.append(holder)
+	tag_holders = still_in
+	for timed in tag_times.keys():
+		if not is_instance_valid(timed) or not tag_holders.has(timed):
+			tag_times.erase(timed)
 	fill_tag_holders()
 	if tag_holders.is_empty():
 		tag_round_won = true
@@ -2420,11 +2702,17 @@ func update_tag_mode(delta: float) -> void:
 			eliminated_bot.queue_free()
 		show_power_message("%s IS OUT!" % eliminated_name)
 	fill_tag_holders()
-	if bot_swings.get_child_count() == 0 and not tag_holders.has(block):
+	# Last jelly standing wins, even if Jelly happens to be IT at that moment.
+	if bot_swings.get_child_count() == 0:
 		tag_round_won = true
 		end_game()
 		return
 	choose_tag_chaser()
+	tag_ai_timer -= delta
+	if tag_ai_timer <= 0.0:
+		tag_ai_timer = 0.25
+		assign_tag_targets()
+		bot_tag_transfers()
 	update_tag_status()
 	update_tag_glows()
 
@@ -2780,6 +3068,9 @@ func end_game() -> void:
 	if active_game_mode == "TAG" and tag_round_won:
 		finalize_game_over()
 	else:
+		# The game-over sting plays at the moment of death, then again on the
+		# final game-over screen if the spin doesn't revive.
+		play_sfx(game_over_sound_player)
 		show_death_wheel()
 
 
@@ -2812,7 +3103,19 @@ func _on_death_wheel_finished(coins: int, revive: bool) -> void:
 
 
 func finalize_game_over() -> void:
-	play_sfx(game_over_sound_player)
+	if game_over_finalized:
+		return
+	game_over_finalized = true
+	var won_tag := active_game_mode == "TAG" and tag_round_won
+	var game_over_title := game_over_screen.get_node("GameOver") as Label
+	if won_tag:
+		# Last jelly standing: celebrate instead of the game-over sting.
+		game_over_title.text = "YOU WIN!"
+		wallet_coins += TAG_WIN_BONUS
+		play_sfx(success_sound_player)
+	else:
+		game_over_title.text = "OOPS!"
+		play_sfx(game_over_sound_player)
 	if active_game_mode == "COIN" and coins_collected > coin_high_score:
 
 		coin_high_score = coins_collected
@@ -2832,14 +3135,21 @@ func finalize_game_over() -> void:
 	game_over_screen.show()
 
 	game_over_run_label.text = "Run: %d coins  •  %d bats" % [coins_collected, bat_kills] if active_game_mode == "COIN" else "Run: %dm high  •  %d coins  •  %d bats" % [height_score, coins_collected, bat_kills]
+	if won_tag:
+		game_over_best_label.text = "Last jelly standing!"
+		game_over_run_label.text = "Winner bonus: +%d coins" % TAG_WIN_BONUS
+		update_coin_counter()
 
 	save_profile()
 	continue_button.visible = not continue_used_this_run and active_game_mode != "TAG" and not tag_round_won
 	CuteStyle.pop_in(game_over_card)
+	if won_tag:
+		return  # no interstitial right after a win
 	game_overs_since_ad += 1
 	if game_overs_since_ad >= INTERSTITIAL_EVERY_GAME_OVERS:
 		game_overs_since_ad = 0
-		show_placeholder_ad(Callable())
+		# Results are already visible. A missing ad or cooldown never blocks them.
+		ad_manager.try_show_death_interstitial()
 
 
 
@@ -2864,6 +3174,11 @@ func show_placeholder_ad(on_closed: Callable) -> void:
 
 func _on_continue_pressed() -> void:
 	if continue_used_this_run:
+		return
+	if OS.has_feature("ios"):
+		if _request_native_reward("continue"):
+			continue_used_this_run = true
+			continue_button.hide()
 		return
 	continue_used_this_run = true
 	continue_button.hide()
@@ -2900,6 +3215,7 @@ func revive_player() -> void:
 	previous_player_center = get_player_center()
 	revive_shield_time = REVIVE_SHIELD_SECONDS
 	game_over = false
+	game_over_finalized = false
 	show_power_message("REVIVED!")
 	play_sfx(revive_sound_player)
 	if not background_music_player.playing:
@@ -2961,6 +3277,7 @@ func start_game() -> void:
 func restart_game() -> void:
 
 	game_over = false
+	game_over_finalized = false
 
 	continue_used_this_run = false
 
@@ -3022,7 +3339,7 @@ func restart_game() -> void:
 	tag_times.clear()
 	tag_chaser = null
 	tag_transfer_cooldown_until = 0.0
-
+	tag_ai_timer = 0.0
 	tag_round_won = false
 
 	bounce_pad_next_trigger_time = 0.0
@@ -3686,9 +4003,13 @@ func open_selected_chest() -> void:
 
 
 func claim_test_ad_reward() -> void:
-	# Rewarded placeholder: coins are only granted after the ad is closed.
 	if ad_reward_button.disabled:
 		return
+	if OS.has_feature("ios"):
+		if not _request_native_reward("coins"):
+			ad_status_label.text = "AD UNAVAILABLE — TRY AGAIN LATER"
+		return
+	# The existing local/web placeholder remains a non-native test flow.
 	ad_reward_button.disabled = true
 	show_placeholder_ad(func() -> void:
 		ad_reward_button.disabled = false
@@ -3698,6 +4019,48 @@ func claim_test_ad_reward() -> void:
 		update_coin_counter()
 		build_skin_shop()
 	)
+
+
+func _request_native_reward(action: String) -> bool:
+	if not pending_reward_action.is_empty():
+		return false
+	pending_reward_action = action
+	reward_action_completed = false
+	if not ad_manager.try_show_rewarded():
+		pending_reward_action = ""
+		return false
+	if action == "coins":
+		ad_reward_button.disabled = true
+	return true
+
+
+func _on_admob_reward_earned() -> void:
+	if pending_reward_action.is_empty() or reward_action_completed:
+		return
+	reward_action_completed = true
+	match pending_reward_action:
+		"coins":
+			wallet_coins += 10
+			ad_status_label.text = "+10 COINS ADDED!"
+			save_profile()
+			update_coin_counter()
+			build_skin_shop()
+		"continue":
+			revive_player()
+		"reroll":
+			_complete_chest_reroll()
+
+
+func _on_admob_rewarded_finished() -> void:
+	ad_reward_button.disabled = false
+	chest_reroll_button.disabled = false
+	if pending_reward_action == "continue" and not reward_action_completed:
+		continue_used_this_run = false
+		continue_button.visible = game_over and active_game_mode != "TAG"
+	elif pending_reward_action == "coins" and not reward_action_completed:
+		ad_status_label.text = "NO COINS AWARDED"
+	pending_reward_action = ""
+	reward_action_completed = false
 
 
 
@@ -3910,26 +4273,35 @@ func reroll_pending_chest() -> void:
 	# One ad-funded reroll per chest; it always lands on a different Jelly.
 	if chest_pending_skin < 0 or chest_reroll_used or chest_rolling:
 		return
-	var candidates := chest_reroll_candidates()
-	if candidates.is_empty():
+	if chest_reroll_candidates().is_empty():
+		return
+	if OS.has_feature("ios"):
+		_request_native_reward("reroll")
 		return
 	chest_reroll_button.disabled = true
 	show_placeholder_ad(func() -> void:
 		chest_reroll_button.disabled = false
-		chest_reroll_used = true
-		chest_pending_skin = -1
-		chest_target_skin = candidates.pick_random()
-		chest_roll_elapsed = 0.0
-		chest_next_tick = 0.0
-		chest_rolling = true
-		chest_claim_button.hide()
-		chest_reroll_button.hide()
-		shop_back_button.disabled = true
-		play_sfx(swoosh_sound_player)
-		prepare_chest_carousel(chest_reward_pool, chest_target_skin)
-		chest_carousel_backdrop.show()
-		chest_carousel.show()
+		_complete_chest_reroll()
 	)
+
+
+func _complete_chest_reroll() -> void:
+	var candidates := chest_reroll_candidates()
+	if candidates.is_empty():
+		return
+	chest_reroll_used = true
+	chest_pending_skin = -1
+	chest_target_skin = candidates.pick_random()
+	chest_roll_elapsed = 0.0
+	chest_next_tick = 0.0
+	chest_rolling = true
+	chest_claim_button.hide()
+	chest_reroll_button.hide()
+	shop_back_button.disabled = true
+	play_sfx(swoosh_sound_player)
+	prepare_chest_carousel(chest_reward_pool, chest_target_skin)
+	chest_carousel_backdrop.show()
+	chest_carousel.show()
 
 
 
