@@ -78,6 +78,7 @@ func _run() -> void:
 	await test_tag_win()
 	await test_tag_ai()
 	await test_banner_never_covers_buttons()
+	await test_ad_layout_and_feedback()
 	clear_save_files()
 	print("\n%d passed, %d failed" % [passes, failures])
 	quit(1 if failures > 0 else 0)
@@ -421,3 +422,20 @@ func test_banner_never_covers_buttons() -> void:
 	await wait(0.1)
 	check("banner is hidden in the shop", not game.banner_ad.visible)
 	game.close_shop()
+
+
+func test_ad_layout_and_feedback() -> void:
+	# A taller real banner (e.g. AdMob adaptive banner) still never covers buttons.
+	await spawn_game()
+	var window_height := float(DisplayServer.window_get_size().y)
+	game._on_real_banner_height(window_height * 0.12)  # roughly 150+ canvas px
+	var banner_top: float = game.get_viewport().get_visible_rect().size.y - game.banner_reserved_height - game.safe_area_bottom
+	var clear := true
+	for button in game.start_screen.find_children("*", "BaseButton", true, false):
+		if (button as Control).get_global_rect().end.y > banner_top + 0.5 and str(button.name) != "SettingsButton":
+			clear = false
+			print("   under real banner: ", button.name)
+	check("menu buttons clear a taller real banner", clear)
+	game.show_toast("Ad not ready yet. Try again in a moment!")
+	check("toast message shows", game.toast_label.visible and game.toast_label.text.begins_with("Ad not ready"))
+	check("no native ads off-device", not game.ad_manager.native_available and not game.ad_manager.is_rewarded_ready())

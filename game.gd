@@ -443,6 +443,9 @@ var pause_button: Button
 var settings_button: Button
 var safe_area_top := 0.0
 var safe_area_bottom := 0.0
+# Space reserved at the bottom of menus for the banner (canvas pixels).
+var banner_reserved_height := PlaceholderBanner.HEIGHT
+var toast_label: Label
 var continue_button: Button
 var game_over_card: Panel
 
@@ -672,6 +675,7 @@ func _ready() -> void:
 	ad_reward_button.pressed.connect(claim_test_ad_reward)
 	ad_manager = JellyAdManager.new()
 	add_child(ad_manager)
+	ad_manager.banner_height_changed.connect(_on_real_banner_height)
 	ad_manager.reward_earned.connect(_on_admob_reward_earned)
 	ad_manager.rewarded_finished.connect(_on_admob_rewarded_finished)
 	ad_manager.fullscreen_started.connect(func() -> void:
@@ -859,7 +863,7 @@ func apply_cute_ui() -> void:
 	CuteStyle.style_label(ad_description, CuteStyle.INK_SOFT, 24)
 	CuteStyle.style_button(ad_reward_button, CuteStyle.BUTTER, CuteStyle.INK)
 	CuteStyle.style_label(ad_status_label, CuteStyle.INK_SOFT, 18)
-	ad_status_label.text = "Placeholder ad (no ad network yet)"
+	ad_status_label.text = "Watch a short video ad" if OS.has_feature("ios") else "Placeholder ad (real ads on iPhone)"
 
 
 
@@ -1008,12 +1012,56 @@ func apply_wide_layout() -> void:
 
 
 
+func _on_real_banner_height(height_pixels: float) -> void:
+	# The real AdMob banner can be taller than the placeholder; convert its
+	# screen-pixel height to game-canvas pixels and make room for it.
+	var window_height := float(DisplayServer.window_get_size().y)
+	if window_height <= 0.0:
+		return
+	var canvas_height := get_viewport().get_visible_rect().size.y
+	banner_reserved_height = maxf(PlaceholderBanner.HEIGHT, height_pixels * canvas_height / window_height)
+	fit_menus_above_banner()
+
+
+
+
+
+func show_toast(message: String) -> void:
+	# Small message that works on any screen, including while paused.
+	if not toast_label:
+		var toast_layer := CanvasLayer.new()
+		toast_layer.layer = 160
+		toast_layer.process_mode = Node.PROCESS_MODE_ALWAYS
+		add_child(toast_layer)
+		toast_label = Label.new()
+		toast_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		toast_label.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+		toast_label.offset_left = -300.0
+		toast_label.offset_right = 300.0
+		toast_label.offset_top = 150.0 + safe_area_top
+		toast_label.offset_bottom = 210.0 + safe_area_top
+		toast_label.theme = CuteStyle.make_theme()
+		CuteStyle.pill_label(toast_label, Color(CuteStyle.INK, 0.9), CuteStyle.WHITE)
+		toast_label.add_theme_font_size_override("font_size", 22)
+		toast_layer.add_child(toast_label)
+	toast_label.text = message
+	toast_label.modulate.a = 1.0
+	toast_label.show()
+	var tween := toast_label.create_tween()
+	tween.tween_interval(1.8)
+	tween.tween_property(toast_label, "modulate:a", 0.0, 0.4)
+	tween.tween_callback(toast_label.hide)
+
+
+
+
+
 func fit_menus_above_banner() -> void:
 	# Whatever the screen shape, nothing tappable on the menu or shop may sit
 	# under the bottom banner: if the lowest control overlaps it, lift the
 	# screen's content just enough (never above the top safe area).
 	var canvas_height := get_viewport().get_visible_rect().size.y
-	var banner_top := canvas_height - PlaceholderBanner.HEIGHT - safe_area_bottom - 12.0
+	var banner_top := canvas_height - banner_reserved_height - safe_area_bottom - 12.0
 	var skip_names := ["JellySky", "ReadabilityVeil", "CuteGradient", "CuteBackground", "SettingsButton"]
 	for screen in [start_screen]:
 		var lowest := -INF
@@ -3179,6 +3227,8 @@ func _on_continue_pressed() -> void:
 		if _request_native_reward("continue"):
 			continue_used_this_run = true
 			continue_button.hide()
+		else:
+			show_toast("Ad not ready yet. Try again in a moment!")
 		return
 	continue_used_this_run = true
 	continue_button.hide()
@@ -4276,7 +4326,8 @@ func reroll_pending_chest() -> void:
 	if chest_reroll_candidates().is_empty():
 		return
 	if OS.has_feature("ios"):
-		_request_native_reward("reroll")
+		if not _request_native_reward("reroll"):
+			show_toast("Ad not ready yet. Try again in a moment!")
 		return
 	chest_reroll_button.disabled = true
 	show_placeholder_ad(func() -> void:

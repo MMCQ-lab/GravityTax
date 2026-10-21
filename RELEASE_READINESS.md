@@ -27,7 +27,7 @@ Status key: **PASS** = verified by tests or direct inspection · **NEEDS MANUAL 
 | CPU | Bot rope-cutting check: an O(n²) loop that called `get_children()` inside the loop was rewritten with a bounding-box pre-check. **1.53 ms → 0.17 ms per frame.** It matched the old logic on 900 randomized frames (0 mismatches). Average script frame time in Sky Climb, measured headless: 6.98 → 3.39 ms. |
 | CI | New `validate` job runs before the iOS build: imports the project, checks that every `.gd` script parses, then runs the test suite. The iOS build only runs if validation passes. |
 | Versioning | The marketing version now comes from `config/version="1.0.0"` in `project.godot`, and the workflow rejects anything that is not `x.y.z`. The build number stays `GITHUB_RUN_NUMBER + offset`, which only ever increases. |
-| Tests | `tests/run_tests.gd`: 52 headless checks (see §7). They use a throwaway save file and never touch a real player save. |
+| Tests | `tests/run_tests.gd`: 66 headless checks (see §7). They use a throwaway save file and never touch a real player save. |
 | Character IP | Five skins that resembled Luffy, Spider-Man, the Creeper, Batman and Iron Man were kept but edited to be generic (§9). |
 | iPad | Menus centre on wider screens, the HUD stays edge-anchored, and the menu art keeps its logo visible. Pop-up messages now sit below the leaderboard. |
 
@@ -108,7 +108,7 @@ Nothing has been committed or pushed. All changes are on the local `release/read
 
 ## 7. Automated test results
 
-Command: `godot --headless --path . -s res://tests/run_tests.gd`, last run **52 passed, 0 failed** (exit code 0).
+Command: `godot --headless --path . -s res://tests/run_tests.gd`, last run **66 passed, 0 failed** (exit code 0).
 
 Covered: resource loading; fresh-install defaults; save round-trip; corrupt-save recovery; invalid-value sanitizing; score/profile save regression; 50-skin catalogue, tiers, obtainability and render size; death → lucky spin → coins → revive; revive odds (~5% over 20,000 spins); continue-via-ad once per run; ad countdown can't be skipped; ad mute / unmute; interstitial every 3rd game over; chest claim / reroll / one-reroll limit / auto-claim / restart recovery; pause freezes physics; volume sliders; resume; orphan-release guard; Home from pause; banner and pause button visibility.
 
@@ -170,11 +170,13 @@ Lower-risk designs left as they are: #46 Star Mushroom (astronaut helmet with a 
 
 | Requirement | Status | Notes |
 |---|---|---|
-| Existing ad / IAP code reviewed | **PASS** | Placeholders only: `ui/placeholder_ad.gd` (full-screen) and `ui/placeholder_banner.gd`. No SDKs, no purchases. |
-| No ad SDK added without approval | **PASS** | |
+| Ad integration | **PASS** (code) / **NEEDS MANUAL TEST** | Google AdMob via the godot-admob v7.0 plugin (MIT), added by Codex and merged in PR #4. On iPhone: bottom banner on the menu and results, rewarded ads (10 coins, continue, chest reroll) that grant only on the SDK's reward callback, and a standard interstitial after every 3rd non-win death with a 90 s cooldown. Placeholders remain only for PC/editor testing. No in-app purchases. |
+| Ad SDK approved | **PASS** | You approved adding ads. Google's UMP consent runs before any ad request. |
 | No deceptive mechanics | **PASS** | Rewards are only granted after the ad closes. The close button counts down 5 s, then can always be closed. Lucky-spin slice sizes match the real odds. Leaving the shop never loses a won chest jelly. |
-| **Placeholder ads in a store build** | **FAIL** (release blocker) | The white "AD" screens and banner are fine for TestFlight but **must not ship to the App Store**. Reviewers treat them as placeholder content (Guideline 2.1). Before submission, either integrate a real ad network or hide all ad UI behind a flag. |
-| Requirements when real ads are added | Documented | (1) Ad SDK privacy manifest + signature; (2) **App Tracking Transparency** prompt + `NSUserTrackingUsageDescription` if the SDK uses IDFA; (3) SKAdNetwork IDs in Info.plist; (4) App Privacy "nutrition label" updated for Identifiers / Usage Data / Diagnostics; (5) an age-rating review (a game this cute may attract kids, and serving personalized ads to children is restricted, so consider non-personalized ads); (6) a privacy policy URL, which App Store Connect requires anyway. |
+| Placeholder ads in a store build | **PASS** | On iOS the placeholders never show; real AdMob units do. If an ad isn't ready, the player gets a short "Ad not ready yet" message instead of a dead button. |
+| Test vs production ads | **NEEDS DECISION** | Builds use Google's **test** ads. For release, flip both `ads/use_production_ads` (project.godot) and `is_real` (addons/AdmobPlugin/ios_export.cfg); see `docs/ADMOB_IOS.md`. |
+| Banner never covers buttons | **PASS** (test) / **NEEDS MANUAL TEST** | Menus make room for the real banner's measured height; a test simulates a taller adaptive banner. |
+| Privacy requirements | **NEEDS DECISION** | Draft App Privacy answers in `docs/APP_STORE_PRIVACY.md`. Still open: decide on the ATT prompt, publish a GDPR message in AdMob, and add a privacy policy URL. Original checklist: | (1) Ad SDK privacy manifest + signature; (2) **App Tracking Transparency** prompt + `NSUserTrackingUsageDescription` if the SDK uses IDFA; (3) SKAdNetwork IDs in Info.plist; (4) App Privacy "nutrition label" updated for Identifiers / Usage Data / Diagnostics; (5) an age-rating review (a game this cute may attract kids, and serving personalized ads to children is restricted, so consider non-personalized ads); (6) a privacy policy URL, which App Store Connect requires anyway. |
 
 ## 11. GitHub Actions and deployment
 
@@ -201,7 +203,7 @@ Lower-risk designs left as they are: #46 Star Mushroom (astronaut helmet with a 
 
 ## 13. Outstanding blockers before App Store submission
 
-1. **Placeholder ads**: integrate a real network (with ATT and privacy work) or disable all ad UI.
+1. **Ads go-live**: switch to production ad units, answer App Privacy (draft in `docs/APP_STORE_PRIVACY.md`), decide on ATT, publish the AdMob GDPR message, and add a privacy policy URL.
 2. **Image provenance**: document how the images were made, and confirm the tool's terms allow commercial use. (Sound licensing is done; see §9.)
 3. **Store listing assets**: iPhone and iPad screenshots, description, keywords, support URL and privacy policy URL. Not in the repo.
 4. **On-device verification** of everything marked NEEDS MANUAL TEST.
@@ -210,7 +212,7 @@ Lower-risk designs left as they are: #46 Star Mushroom (astronaut helmet with a 
 
 **Ready for TestFlight beta: yes.** Saves, settings, pause and backgrounding, chests and the death flow are covered by automated tests, and CI now blocks a broken build.
 
-**Ready for App Store submission: not yet.** The character-IP risk is resolved and iPad is supported. What remains: real ads (or hiding the placeholder ads), sound licence links, and store screenshots and listing text. None of these are code defects.
+**Ready for App Store submission: not yet.** The character-IP risk is resolved and iPad is supported. Real ads are integrated (test units). What remains: the production-ads switch and privacy answers, image provenance, and store screenshots and listing text. None of these are code defects.
 
 ---
 
