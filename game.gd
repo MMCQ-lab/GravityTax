@@ -448,6 +448,11 @@ var audio_muted := false
 var settings_panel: SettingsPanel
 var pause_button: Button
 var settings_button: Button
+var help_button: Button
+var tutorial: Tutorial
+var tutorial_seen := false
+# Tests turn this off so the first-launch guide doesn't cover the menu.
+var auto_show_tutorial := true
 var safe_area_top := 0.0
 var safe_area_bottom := 0.0
 # Space reserved at the bottom of menus for the banner (canvas pixels).
@@ -717,6 +722,8 @@ func _ready() -> void:
 	apply_safe_area()
 	apply_audio_settings()
 	call_deferred("show_studio_intro")
+	if auto_show_tutorial and not tutorial_seen:
+		get_tree().create_timer(2.3).timeout.connect(_show_first_launch_tutorial)
 
 
 
@@ -932,11 +939,109 @@ func build_pause_and_settings() -> void:
 	)
 	start_screen.add_child(settings_button)
 
+	# Tiny "?" button beside Settings opens the How to Play guide.
+	help_button = Button.new()
+	help_button.name = "HelpButton"
+	help_button.text = "?"
+	help_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	help_button.offset_left = -270.0
+	help_button.offset_right = -208.0
+	help_button.offset_top = 20.0
+	help_button.offset_bottom = 82.0
+	help_button.add_theme_font_size_override("font_size", 30)
+	CuteStyle.style_button(help_button, CuteStyle.SKY)
+	help_button.pressed.connect(open_tutorial)
+	start_screen.add_child(help_button)
+
+	tutorial = Tutorial.new()
+	tutorial.pages = build_tutorial_pages()
+	tutorial.closed.connect(_on_tutorial_closed)
+	add_child(tutorial)
 
 
+
+
+
+func build_tutorial_pages() -> Array[Dictionary]:
+	var jelly := create_skin_texture(0)
+	return [
+		{"title": "HOW TO PLAY", "images": [jelly, PURPLE_ORB_TEXTURE],
+			"text": "TAP to hop.\nHOLD to grab the nearest purple orb and swing.\nLET GO to fling yourself through the sky!"},
+		{"title": "COIN RUN", "images": [jelly, COMMON_CHEST_TEXTURE],
+			"text": "Race the other jellies for coins. Grab as many as you can before you fall. Coins you collect go in your bank."},
+		{"title": "SKY CLIMB", "images": [PURPLE_ORB_TEXTURE, jelly, PURPLE_ORB_TEXTURE],
+			"text": "Swing higher and higher. Reach the top to start the next level, and each level gets harder. Don't fall into the jam lava!"},
+		{"title": "JELLY TAG", "extra": _tutorial_tag_art,
+			"text": "Jellies with a red IT badge are IT. If you're IT, touch another jelly within 30 seconds to pass it on, or you're out. Be the last jelly standing to win!"},
+		{"title": "WATCH OUT!", "extra": _tutorial_danger_art,
+			"text": "Bats chase you if you get close. From Sky Climb level 2, spider webs stick you in place, so TAP FAST to break free!"},
+		{"title": "POWER-UPS", "images": [ROCKET_TEXTURE, TELEPORT_TEXTURE, MAGNET_TEXTURE, KNIFE_TEXTURE],
+			"text": "Rocket boosts you up. Warp jumps you somewhere new. Magnet pulls in coins. Spinning knives beat bats and slice spider webs."},
+		{"title": "COLLECT JELLIES", "images": [COMMON_CHEST_TEXTURE, UNCOMMON_CHEST_TEXTURE, jelly],
+			"text": "Spend coins on chests in the Jelly Vault to unlock 50 jellies. After every run, spin the lucky wheel for bonus coins!"},
+	]
+
+
+func _tutorial_tag_art() -> Node:
+	var holder := Node2D.new()
+	var it_jelly := Sprite2D.new()
+	it_jelly.texture = create_skin_texture(5 if skin_definitions.size() > 5 else 0)
+	it_jelly.scale = Vector2.ONE * (130.0 / maxf(1.0, float(it_jelly.texture.get_width())))
+	it_jelly.position = Vector2(-90.0, 20.0)
+	it_jelly.modulate = Color(1.0, 0.75, 0.3)
+	holder.add_child(it_jelly)
+	var badge := Label.new()
+	badge.text = "IT 23"
+	badge.size = Vector2(120.0, 44.0)
+	badge.position = Vector2(-150.0, -90.0)
+	badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	CuteStyle.style_label(badge, CuteStyle.WHITE, 26, Color("7a1020"), 6)
+	badge.add_theme_stylebox_override("normal", CuteStyle.box(TAG_BADGE_COLOR, 20, CuteStyle.WHITE, 3))
+	holder.add_child(badge)
+	var safe_jelly := Sprite2D.new()
+	safe_jelly.texture = create_skin_texture(0)
+	safe_jelly.scale = Vector2.ONE * (130.0 / maxf(1.0, float(safe_jelly.texture.get_width())))
+	safe_jelly.position = Vector2(110.0, 20.0)
+	holder.add_child(safe_jelly)
+	return holder
+
+
+func _tutorial_danger_art() -> Node:
+	var holder := Node2D.new()
+	var bat := Sprite2D.new()
+	bat.texture = BAT_TEXTURE
+	bat.scale = Vector2.ONE * (150.0 / maxf(1.0, float(BAT_TEXTURE.get_width())))
+	bat.position = Vector2(-120.0, 0.0)
+	holder.add_child(bat)
+	var web := SpiderWeb.new()
+	web.scale = Vector2.ONE * 0.62
+	web.position = Vector2(110.0, 40.0)
+	holder.add_child(web)
+	return holder
+
+
+func open_tutorial() -> void:
+	tutorial.open()
+
+
+func _show_first_launch_tutorial() -> void:
+	if not tutorial_seen and not game_started and start_screen.visible and not tutorial.visible:
+		tutorial.open()
+
+
+func _on_tutorial_closed() -> void:
+	if not tutorial_seen:
+		tutorial_seen = true
+		write_save()
 
 
 const VERSION_LOG: Array[Dictionary] = [
+	{"version": "1.0.4", "notes": [
+		"New How to Play guide. Tap the ? button on the home screen any time.",
+		"The guide opens by itself the first time you play.",
+		"Bigger, easier-to-read jelly name tags.",
+	]},
 	{"version": "1.0.3", "notes": [
 		"Jelly Tag rounds give 30 seconds to pass the tag (up from 15).",
 		"Much easier to see who's IT: a red IT badge with a countdown floats over every IT jelly.",
@@ -1965,9 +2070,9 @@ func spawn_swing_bot(anchor_position: Vector2, bot_number: int) -> void:
 
 	name_label.name = "NameLabel"
 
-	name_label.position = Vector2(-54.0, -66.0)
+	name_label.position = Vector2(-70.0, -70.0)
 
-	name_label.size = Vector2(108.0, 22.0)
+	name_label.size = Vector2(140.0, 26.0)
 
 	name_label.add_theme_color_override("font_color", Color.WHITE)
 
@@ -1977,7 +2082,7 @@ func spawn_swing_bot(anchor_position: Vector2, bot_number: int) -> void:
 
 	name_label.add_theme_constant_override("shadow_offset_y", 2)
 
-	name_label.add_theme_font_size_override("font_size", 13)
+	name_label.add_theme_font_size_override("font_size", 17)
 
 	name_label.text = str(bot.get_meta("name"))
 
@@ -4091,6 +4196,7 @@ func write_save() -> void:
 	save_file.set_value("profile", "selected_skin", selected_skin)
 	save_file.set_value("profile", "pending_chest_skin", chest_pending_skin)
 	save_file.set_value("profile", "player_name", player_name)
+	save_file.set_value("profile", "tutorial_seen", tutorial_seen)
 	var saved_skin_ids: Array[String] = []
 	for skin_id in unlocked_skins:
 		saved_skin_ids.append(str(skin_id))
@@ -4140,6 +4246,7 @@ func load_profile() -> void:
 				unlocked_skins.append(skin_id)
 		# A chest reward left unclaimed when the app closed is granted on launch.
 		player_name = sanitize_player_name(str(profile_file.get_value("profile", "player_name", "")))
+		tutorial_seen = bool(profile_file.get_value("profile", "tutorial_seen", false))
 		var pending_from_save := int(profile_file.get_value("profile", "pending_chest_skin", -1))
 		if pending_from_save >= 0 and pending_from_save < skin_definitions.size() and not unlocked_skins.has(pending_from_save):
 			unlocked_skins.append(pending_from_save)
