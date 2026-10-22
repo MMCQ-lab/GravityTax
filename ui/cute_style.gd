@@ -25,6 +25,8 @@ const RARITY_COLORS := {
 	"RARE": Color("3a8dff"),
 	"EPIC": Color("9b5cff"),
 	"LEGENDARY": Color("f5b821"),
+	"SPARKLE": Color("ff6fcf"),
+	"LIMITED": Color("ff8a2b"),
 }
 static var _font: Font = null
 

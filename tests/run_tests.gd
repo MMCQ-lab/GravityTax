@@ -91,6 +91,8 @@ func _run() -> void:
 	await test_coin_run_round()
 	await test_climb_scenery()
 	await test_hops_and_names()
+	await test_chests_and_effects()
+	await test_clear_all_data()
 	clear_save_files()
 	print("\n%d passed, %d failed" % [passes, failures])
 	quit(1 if failures > 0 else 0)
@@ -175,13 +177,17 @@ func test_skin_catalogue() -> void:
 	var tiers := {}
 	for skin in game.skin_definitions:
 		tiers[str(skin["tier"])] = int(tiers.get(str(skin["tier"]), 0)) + 1
-	check("50 skins across five rarities", game.skin_definitions.size() == 50 and tiers.size() == 5)
+	check("66 skins: five rarities plus 16 limited", game.skin_definitions.size() == 66 and tiers.size() == 6 and int(tiers.get("Limited", 0)) == 16)
 	var obtainable := {0: true}
 	for tier_name in game.chest_definitions:
 		var chest: Dictionary = game.chest_definitions[tier_name]
 		if bool(chest["available"]):
 			for reward in chest["rewards"]:
-				obtainable[int(reward)] = true
+				if int(reward) < game.EFFECT_ID_BASE:
+					obtainable[int(reward)] = true
+	for event in game.SEASON_EVENTS:
+		for reward in event["skins"]:
+			obtainable[int(reward)] = true
 	check("every skin can be earned from a chest", obtainable.size() == game.skin_definitions.size())
 	var consistent_size := true
 	for skin_index in range(game.skin_definitions.size()):
@@ -728,3 +734,70 @@ func test_hops_and_names() -> void:
 		game.launch()
 	check("other modes keep unlimited hops", game.air_jumps_used == 0)
 	game.return_to_main_menu()
+
+
+func test_chests_and_effects() -> void:
+	game.season_override = "fall"
+	game.open_shop()
+	check("seven chests in the tray", game.chest_pickers.size() == 7)
+	check("Fall chest is open in October", bool(game.chest_definitions["LIMITED"]["available"]) and game.chest_definitions["LIMITED"]["rewards"].has(50))
+	game.season_override = "none"
+	game.refresh_limited_chest()
+	game.refresh_chest_selection_ui()
+	check("seasonal chest is greyed out off-season", not bool(game.chest_definitions["LIMITED"]["available"]) and (game.chest_pickers["LIMITED"] as TextureButton).modulate.r < 0.9)
+	game.season_override = "fall"
+	game.refresh_limited_chest()
+	# Open a Sparkle chest and claim the effect.
+	game.wallet_coins = 1000
+	game.select_chest("SPARKLE")
+	game.open_selected_chest()
+	check("sparkle chest rolls an effect", game.chest_rolling and game.is_effect_reward(game.chest_target_skin))
+	game.finish_chest()
+	game.claim_pending_chest()
+	check("effect unlocked and equipped", game.effects_owned.size() == 1 and game.selected_effect == game.effects_owned[0])
+	check("effect shows behind the jelly", is_instance_valid(game.player_effect_node) and game.player_effect_node.get_index() == 0)
+	game.set_shop_tab("effects")
+	check("effects tab shows the menu", game.effects_panel.visible)
+	(game.effect_cards[""]["card"] as Button).pressed.emit()
+	check("NONE removes the effect", game.selected_effect == "" and game.player_effect_node == null)
+	game.equip_effect(game.effects_owned[0])
+	game.close_shop()
+	await spawn_game()
+	check("effects are saved", game.effects_owned.size() == 1 and not game.selected_effect.is_empty())
+	# Seasonal chest gives a limited jelly.
+	game.season_override = "fall"
+	game.wallet_coins = 1000
+	game.open_shop()
+	game.select_chest("LIMITED")
+	game.open_selected_chest()
+	game.finish_chest()
+	var won: int = game.chest_pending_skin
+	game.claim_pending_chest()
+	check("seasonal chest gives a Fall jelly", won >= 50 and won <= 53 and game.unlocked_skins.has(won))
+	game.close_shop()
+	game.season_override = ""
+
+
+func test_clear_all_data() -> void:
+	game.coin_high_score = 50
+	game.climb_high_score = 900
+	game.wallet_coins = 300
+	game.unlocked_skins.append(12)
+	game.write_save()
+	game.settings_panel.open(false, 1.0, 1.0, false, "")
+	var clear := game.settings_panel.find_child("ClearDataButton", true, false) as Button
+	check("Clear All Data shows in menu Settings", clear.visible)
+	clear.pressed.emit()
+	var confirm := game.settings_panel.find_child("ConfirmClear", true, false) as Button
+	var body := game.settings_panel._confirm_body as Label
+	check("first check lists what gets deleted", body.text.contains("high scores") and body.text.contains("unlocked jelly"))
+	confirm.pressed.emit()
+	check("asks a second time before deleting", game.coin_high_score == 50 and game.settings_panel._confirm_title.text == "ARE YOU SURE?")
+	confirm.pressed.emit()
+	check("data is cleared after the second yes", game.coin_high_score == 0 and game.climb_high_score == 0 and game.wallet_coins == 0 and game.unlocked_skins == [0])
+	game.settings_panel.close()
+	await spawn_game()
+	check("cleared data stays cleared", game.coin_high_score == 0 and game.unlocked_skins.size() == 1)
+	game.settings_panel.open(true, 1.0, 1.0, false, "")
+	check("no Clear button on the pause menu", not (game.settings_panel.find_child("ClearDataButton", true, false) as Button).visible)
+	game.settings_panel.close()

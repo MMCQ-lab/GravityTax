@@ -16,8 +16,21 @@ const MAGNET_TEXTURE := preload("res://images/magnet_powerup.png")
 
 const KNIFE_TEXTURE := preload("res://images/knife_powerup.png")
 
-const COMMON_CHEST_TEXTURE := preload("res://images/common_chest.png")
-const UNCOMMON_CHEST_TEXTURE := preload("res://images/uncommon_chest.png")
+const COMMON_CHEST_TEXTURE := preload("res://images/chests/chest_common.png")
+const UNCOMMON_CHEST_TEXTURE := preload("res://images/chests/chest_uncommon.png")
+const SEASON_CHEST_TEXTURES := {
+	"fall": preload("res://images/chests/chest_fall.png"),
+	"winter": preload("res://images/chests/chest_winter.png"),
+	"spring": preload("res://images/chests/chest_spring.png"),
+	"summer": preload("res://images/chests/chest_summer.png"),
+}
+const EFFECT_TEXTURES := {
+	"glow": preload("res://images/effects/glow.png"),
+	"star": preload("res://images/effects/star.png"),
+	"heart": preload("res://images/effects/heart.png"),
+	"bubble": preload("res://images/effects/bubble.png"),
+	"flake": preload("res://images/effects/flake.png"),
+}
 # Audio sources and licences: sounds/CREDITS.md
 const BACKGROUND_MUSIC := preload("res://sounds/music_1.mp3")
 const BACKGROUND_MUSIC_ALT := preload("res://sounds/music_2.mp3")
@@ -340,9 +353,61 @@ var skin_definitions: Array[Dictionary] = [
 
 	{"name": "Shadow Knight Jelly", "tier": "Legendary"},
 
-	{"name": "Moon Mage Jelly", "tier": "Legendary"}
+	{"name": "Moon Mage Jelly", "tier": "Legendary"},
+
+	# Limited-time seasonal jellies (only in the seasonal chest during their event).
+	{"name": "Pumpkin Jelly", "tier": "Limited"},
+	{"name": "Witch Jelly", "tier": "Limited"},
+	{"name": "Turkey Jelly", "tier": "Limited"},
+	{"name": "Candy Corn Jelly", "tier": "Limited"},
+	{"name": "Santa Hat Jelly", "tier": "Limited"},
+	{"name": "Snowman Jelly", "tier": "Limited"},
+	{"name": "Reindeer Jelly", "tier": "Limited"},
+	{"name": "Snowflake Jelly", "tier": "Limited"},
+	{"name": "Spring Bunny Jelly", "tier": "Limited"},
+	{"name": "Easter Egg Jelly", "tier": "Limited"},
+	{"name": "Cherry Blossom Jelly", "tier": "Limited"},
+	{"name": "Lucky Clover Jelly", "tier": "Limited"},
+	{"name": "Beach Day Jelly", "tier": "Limited"},
+	{"name": "Stars & Stripes Jelly", "tier": "Limited"},
+	{"name": "Hibiscus Jelly", "tier": "Limited"},
+	{"name": "Sunshine Jelly", "tier": "Limited"},
 
 ]
+
+# Seasonal events: [month, day] windows. Winter wraps over New Year.
+const SEASON_EVENTS: Array[Dictionary] = [
+	{"id": "fall", "name": "FALL", "start": [10, 1], "end": [11, 30], "skins": [50, 51, 52, 53]},
+	{"id": "winter", "name": "WINTER", "start": [12, 1], "end": [1, 7], "skins": [54, 55, 56, 57]},
+	{"id": "spring", "name": "SPRING", "start": [3, 10], "end": [4, 30], "skins": [58, 59, 60, 61]},
+	{"id": "summer", "name": "SUMMER", "start": [6, 20], "end": [8, 31], "skins": [62, 63, 64, 65]},
+]
+const MONTH_NAMES: Array[String] = ["", "JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
+# Tests set this to an event id, or "none", instead of using today's date.
+var season_override := ""
+
+# Glow and trail effects from the Sparkle chest. Reward ids start at 1000.
+const EFFECT_ID_BASE := 1000
+const EFFECTS: Array[Dictionary] = [
+	{"id": "glow", "name": "PINK GLOW", "style": "glow", "color": "ff7ad9"},
+	{"id": "gold", "name": "GOLDEN GLOW", "style": "glow", "color": "ffd23a"},
+	{"id": "sparkles", "name": "SPARKLE TRAIL", "style": "trail", "texture": "star", "color": "ffffff"},
+	{"id": "hearts", "name": "HEART TRAIL", "style": "trail", "texture": "heart", "color": "ff6f9f"},
+	{"id": "bubbles", "name": "BUBBLES", "style": "trail", "texture": "bubble", "color": "8ed8ff"},
+	{"id": "rainbow", "name": "RAINBOW TRAIL", "style": "rainbow", "color": "ff5f5f"},
+	{"id": "snow", "name": "SNOWFALL", "style": "trail", "texture": "flake", "color": "ffffff"},
+	{"id": "confetti", "name": "CONFETTI", "style": "confetti", "color": "ffd23a"},
+]
+var effects_owned: Array[String] = []
+var selected_effect := ""
+var player_effect_node: Node2D
+var effects_tab_button: Button
+var effects_panel: Panel
+var effect_cards := {}
+var chest_pickers := {}
+var chest_picker_rings := {}
+var chest_picker_labels := {}
+const CHEST_ORDER: Array[String] = ["COMMON", "UNCOMMON", "RARE", "EPIC", "LEGENDARY", "SPARKLE", "LIMITED"]
 
 var bot_names: Array[String] = [
 	"Bloop", "Mochi", "Pip", "Zing", "Wobble", "Nori", "Fizz", "Taffy", "Pebble", "Comet", "Pogo", "Doodle",
@@ -365,15 +430,19 @@ var selected_chest_tier := "COMMON"
 
 var chest_definitions: Dictionary = {
 
-	"COMMON": {"cost": 50, "rewards": [1, 2, 3, 4, 5, 6, 7, 8, 9], "texture": COMMON_CHEST_TEXTURE, "description": "Guaranteed new classic Jelly skin", "available": true},
+	"COMMON": {"cost": 50, "rewards": [1, 2, 3, 4, 5, 6, 7, 8, 9], "texture": preload("res://images/chests/chest_common.png"), "description": "Guaranteed new classic Jelly skin", "available": true},
 
-	"UNCOMMON": {"cost": 100, "rewards": [10, 11, 12, 13, 14, 15, 16, 17, 18, 19], "texture": UNCOMMON_CHEST_TEXTURE, "description": "Guaranteed cute animal Jelly", "available": true},
+	"UNCOMMON": {"cost": 100, "rewards": [10, 11, 12, 13, 14, 15, 16, 17, 18, 19], "texture": preload("res://images/chests/chest_uncommon.png"), "description": "Guaranteed cute animal Jelly", "available": true},
 
-	"RARE": {"cost": 175, "rewards": [20, 21, 22, 23, 24, 25, 26, 27, 28, 29], "texture": preload("res://images/rare_chest.png"), "description": "Guaranteed new food Jelly skin", "available": true},
+	"RARE": {"cost": 175, "rewards": [20, 21, 22, 23, 24, 25, 26, 27, 28, 29], "texture": preload("res://images/chests/chest_rare.png"), "description": "Guaranteed new food Jelly skin", "available": true},
 
-	"EPIC": {"cost": 250, "rewards": [30, 31, 32, 33, 34, 35, 36, 37, 38, 39], "texture": preload("res://images/epic_chest.png"), "description": "Guaranteed new epic Jelly skin", "available": true},
+	"EPIC": {"cost": 250, "rewards": [30, 31, 32, 33, 34, 35, 36, 37, 38, 39], "texture": preload("res://images/chests/chest_epic.png"), "description": "Guaranteed new epic Jelly skin", "available": true},
 
-	"LEGENDARY": {"cost": 500, "rewards": [40, 41, 42, 43, 44, 45, 46, 47, 48, 49], "texture": preload("res://images/legendary_chest.png"), "description": "Guaranteed new legendary Jelly skin", "available": true}
+	"LEGENDARY": {"cost": 500, "rewards": [40, 41, 42, 43, 44, 45, 46, 47, 48, 49], "texture": preload("res://images/chests/chest_legendary.png"), "description": "Guaranteed new legendary Jelly skin", "available": true},
+
+	"SPARKLE": {"cost": 150, "rewards": [1000, 1001, 1002, 1003, 1004, 1005, 1006, 1007], "texture": preload("res://images/chests/chest_sparkle.png"), "description": "A glow or trail effect for your jelly", "available": true},
+
+	"LIMITED": {"cost": 120, "rewards": [], "texture": preload("res://images/chests/chest_fall.png"), "description": "Limited-time seasonal jellies", "available": false}
 
 }
 
@@ -954,6 +1023,7 @@ func build_pause_and_settings() -> void:
 	add_child(settings_panel)
 	settings_panel.settings_changed.connect(_on_settings_changed)
 	settings_panel.name_changed.connect(set_player_name)
+	settings_panel.clear_data_confirmed.connect(clear_all_data)
 	settings_panel.resume_requested.connect(resume_game)
 	settings_panel.home_requested.connect(func() -> void:
 		get_tree().paused = false
@@ -1030,7 +1100,7 @@ func build_tutorial_pages() -> Array[Dictionary]:
 		{"title": "POWER-UPS", "images": [ROCKET_TEXTURE, TELEPORT_TEXTURE, MAGNET_TEXTURE, KNIFE_TEXTURE],
 			"text": "Grab them in the sky, or buy them in the Jelly Vault and tap them during a run. Spinning knives beat bats and slice spider webs!"},
 		{"title": "COLLECT JELLIES", "images": [COMMON_CHEST_TEXTURE, UNCOMMON_CHEST_TEXTURE, jelly],
-			"text": "Spend coins on chests in the Jelly Vault to unlock 50 jellies. After every run, spin the lucky wheel for bonus coins!"},
+			"text": "Spend coins on chests in the Jelly Vault for new jellies, sparkly effects and limited-time seasonal jellies. After every run, spin the lucky wheel!"},
 	]
 
 
@@ -1089,25 +1159,29 @@ func powerup_icon(kind: String) -> Texture2D:
 
 
 func build_powerup_ui() -> void:
-	# Four shop tabs now share the row: Chests, Jellies, Power-ups, Free Coins.
-	chest_tab_button.position = Vector2(28.0, 195.0)
-	chest_tab_button.size = Vector2(158.0, 80.0)
-	jelly_tab_button.position = Vector2(194.0, 195.0)
-	jelly_tab_button.size = Vector2(158.0, 80.0)
-	coins_tab_button.position = Vector2(534.0, 195.0)
-	coins_tab_button.size = Vector2(158.0, 80.0)
-	for tab in [chest_tab_button, jelly_tab_button, coins_tab_button]:
-		(tab as Button).add_theme_font_size_override("font_size", 19)
+	# Five shop tabs share the row: Chests, Jellies, Effects, Power-ups, Free Coins.
+	effects_tab_button = Button.new()
+	effects_tab_button.name = "EffectsTabButton"
+	effects_tab_button.text = "EFFECTS"
+	CuteStyle.style_tab(effects_tab_button, CuteStyle.CORAL)
+	effects_tab_button.pressed.connect(set_shop_tab.bind("effects"))
+	shop_screen.add_child(effects_tab_button)
 	coins_tab_button.text = "FREE\nCOINS"
 	powerups_tab_button = Button.new()
 	powerups_tab_button.name = "PowerupsTabButton"
 	powerups_tab_button.text = "POWER-\nUPS"
-	powerups_tab_button.position = Vector2(360.0, 195.0)
-	powerups_tab_button.size = Vector2(166.0, 80.0)
-	powerups_tab_button.add_theme_font_size_override("font_size", 19)
+	powerups_tab_button.add_theme_font_size_override("font_size", 17)
 	CuteStyle.style_tab(powerups_tab_button, CuteStyle.SKY)
 	powerups_tab_button.pressed.connect(set_shop_tab.bind("powerups"))
 	shop_screen.add_child(powerups_tab_button)
+	var tab_index := 0
+	for tab in [chest_tab_button, jelly_tab_button, effects_tab_button, powerups_tab_button, coins_tab_button]:
+		(tab as Button).position = Vector2(22.0 + float(tab_index) * 136.0, 195.0)
+		(tab as Button).size = Vector2(130.0, 80.0)
+		(tab as Button).add_theme_font_size_override("font_size", 17)
+		tab_index += 1
+	build_chest_picker_tray()
+	build_effects_panel()
 
 	powerup_panel = Panel.new()
 	powerup_panel.name = "PowerupPanel"
@@ -1199,6 +1273,381 @@ func build_powerup_ui() -> void:
 	coin_timer_label.add_theme_font_size_override("font_size", 28)
 	coin_timer_label.hide()
 	$HUD.add_child(coin_timer_label)
+
+
+func season_event_by_id(event_id: String) -> Dictionary:
+	for event in SEASON_EVENTS:
+		if event["id"] == event_id:
+			return event
+	return {}
+
+
+func _date_in_window(month: int, day: int, start: Array, finish: Array) -> bool:
+	var today := month * 100 + day
+	var from := int(start[0]) * 100 + int(start[1])
+	var to := int(finish[0]) * 100 + int(finish[1])
+	if from <= to:
+		return today >= from and today <= to
+	return today >= from or today <= to
+
+
+func active_season_event() -> Dictionary:
+	if season_override == "none":
+		return {}
+	if not season_override.is_empty():
+		return season_event_by_id(season_override)
+	var date := Time.get_date_dict_from_system()
+	for event in SEASON_EVENTS:
+		if _date_in_window(int(date["month"]), int(date["day"]), event["start"], event["end"]):
+			return event
+	return {}
+
+
+func next_season_event() -> Dictionary:
+	var date := Time.get_date_dict_from_system()
+	var today := int(date["month"]) * 100 + int(date["day"])
+	var best: Dictionary = {}
+	var best_gap := 9999
+	for event in SEASON_EVENTS:
+		var start := int(event["start"][0]) * 100 + int(event["start"][1])
+		var gap := start - today if start > today else start + 1200 - today
+		if gap < best_gap:
+			best_gap = gap
+			best = event
+	return best
+
+
+func next_season_text() -> String:
+	var next := next_season_event()
+	if next.is_empty():
+		return "SOON"
+	return "%s: %s %d" % [str(next["name"]), MONTH_NAMES[int(next["start"][0])], int(next["start"][1])]
+
+
+func refresh_limited_chest() -> void:
+	var limited: Dictionary = chest_definitions["LIMITED"]
+	var event := active_season_event()
+	if event.is_empty():
+		limited["available"] = false
+		limited["rewards"] = []
+		var upcoming := next_season_event()
+		limited["texture"] = SEASON_CHEST_TEXTURES.get(str(upcoming.get("id", "fall")), SEASON_CHEST_TEXTURES["fall"])
+		limited["description"] = "Seasonal jellies are back for %s" % next_season_text()
+	else:
+		limited["available"] = true
+		limited["rewards"] = event["skins"]
+		limited["texture"] = SEASON_CHEST_TEXTURES[event["id"]]
+		limited["description"] = "LIMITED TIME: %s jellies until %s %d!" % [str(event["name"]), MONTH_NAMES[int(event["end"][0])], int(event["end"][1])]
+
+
+func chest_display_name(tier: String) -> String:
+	if tier == "LIMITED":
+		var event := active_season_event()
+		return str(event["name"]) if not event.is_empty() else "SEASONAL"
+	return tier
+
+
+func is_effect_reward(reward_id: int) -> bool:
+	return reward_id >= EFFECT_ID_BASE
+
+
+func effect_key(reward_id: int) -> String:
+	var index := reward_id - EFFECT_ID_BASE
+	return str(EFFECTS[index]["id"]) if index >= 0 and index < EFFECTS.size() else ""
+
+
+func effect_index(effect_id: String) -> int:
+	for index in range(EFFECTS.size()):
+		if EFFECTS[index]["id"] == effect_id:
+			return index
+	return -1
+
+
+func reward_owned(reward_id: int) -> bool:
+	if is_effect_reward(reward_id):
+		return effects_owned.has(effect_key(reward_id))
+	return unlocked_skins.has(reward_id)
+
+
+func reward_name(reward_id: int) -> String:
+	if is_effect_reward(reward_id):
+		return str(EFFECTS[reward_id - EFFECT_ID_BASE]["name"])
+	return str(skin_definitions[reward_id]["name"])
+
+
+func effect_icon(effect_id: String) -> Texture2D:
+	var index := effect_index(effect_id)
+	if index < 0:
+		return EFFECT_TEXTURES["glow"]
+	var effect: Dictionary = EFFECTS[index]
+	return EFFECT_TEXTURES.get(str(effect.get("texture", "glow")), EFFECT_TEXTURES["glow"]) if effect["style"] == "trail" else (EFFECT_TEXTURES["star"] if effect["style"] == "confetti" else EFFECT_TEXTURES["glow"])
+
+
+func effect_color(effect_id: String) -> Color:
+	var index := effect_index(effect_id)
+	if index < 0:
+		return Color.WHITE
+	var effect: Dictionary = EFFECTS[index]
+	if effect["style"] == "trail" and str(effect["color"]) == "ffffff":
+		return Color("ffe36b") if effect["id"] == "sparkles" else Color("8ed8ff")
+	return Color(str(effect["color"]))
+
+
+func reward_texture(reward_id: int) -> Texture2D:
+	return effect_icon(effect_key(reward_id)) if is_effect_reward(reward_id) else create_skin_texture(reward_id)
+
+
+func reward_tint(reward_id: int) -> Color:
+	return effect_color(effect_key(reward_id)) if is_effect_reward(reward_id) else Color.WHITE
+
+
+func unlock_effect(effect_id: String, equip: bool) -> void:
+	if effect_index(effect_id) < 0:
+		return
+	if not effects_owned.has(effect_id):
+		effects_owned.append(effect_id)
+	if equip:
+		selected_effect = effect_id
+		apply_player_effect()
+
+
+func equip_effect(effect_id: String) -> void:
+	if not effect_id.is_empty() and not effects_owned.has(effect_id):
+		chest_result_label.text = "OPEN A SPARKLE CHEST TO UNLOCK"
+		return
+	selected_effect = effect_id
+	apply_player_effect()
+	save_profile()
+	refresh_effects_panel()
+
+
+func _gradient(colors: Array, alphas: Array) -> Gradient:
+	var gradient := Gradient.new()
+	var offsets := PackedFloat32Array()
+	var packed := PackedColorArray()
+	for index in range(colors.size()):
+		offsets.append(float(index) / float(maxi(1, colors.size() - 1)))
+		var c: Color = colors[index]
+		c.a = float(alphas[index])
+		packed.append(c)
+	gradient.offsets = offsets
+	gradient.colors = packed
+	return gradient
+
+
+func make_effect_node(effect_id: String) -> Node2D:
+	var index := effect_index(effect_id)
+	if index < 0:
+		return null
+	var effect: Dictionary = EFFECTS[index]
+	var color := Color(str(effect["color"]))
+	match str(effect["style"]):
+		"glow":
+			var glow := Sprite2D.new()
+			glow.texture = EFFECT_TEXTURES["glow"]
+			glow.modulate = Color(color, 0.85)
+			glow.scale = Vector2.ONE * 1.5
+			var pulse := glow.create_tween().set_loops()
+			pulse.tween_property(glow, "scale", Vector2.ONE * 1.75, 0.6).set_trans(Tween.TRANS_SINE)
+			pulse.tween_property(glow, "scale", Vector2.ONE * 1.45, 0.6).set_trans(Tween.TRANS_SINE)
+			return glow
+		"rainbow":
+			var rainbow := CPUParticles2D.new()
+			rainbow.texture = EFFECT_TEXTURES["glow"]
+			rainbow.amount = 40
+			rainbow.lifetime = 0.7
+			rainbow.local_coords = false
+			rainbow.gravity = Vector2.ZERO
+			rainbow.emission_shape = CPUParticles2D.EMISSION_SHAPE_SPHERE
+			rainbow.emission_sphere_radius = 18.0
+			rainbow.scale_amount_min = 0.35
+			rainbow.scale_amount_max = 0.5
+			rainbow.color_ramp = _gradient([Color("ff5f5f"), Color("ffd23a"), Color("43c463"), Color("3a8dff"), Color("9b5cff")], [0.9, 0.85, 0.75, 0.6, 0.0])
+			return rainbow
+		"confetti":
+			var confetti := CPUParticles2D.new()
+			confetti.amount = 30
+			confetti.lifetime = 1.1
+			confetti.local_coords = false
+			confetti.emission_shape = CPUParticles2D.EMISSION_SHAPE_SPHERE
+			confetti.emission_sphere_radius = 30.0
+			confetti.gravity = Vector2(0.0, 260.0)
+			confetti.initial_velocity_min = 40.0
+			confetti.initial_velocity_max = 110.0
+			confetti.spread = 180.0
+			confetti.angular_velocity_min = -360.0
+			confetti.angular_velocity_max = 360.0
+			confetti.scale_amount_min = 6.0
+			confetti.scale_amount_max = 10.0
+			confetti.color_initial_ramp = _gradient([Color("ff5f8f"), Color("ffd23a"), Color("43c463"), Color("3a8dff"), Color("9b5cff")], [1, 1, 1, 1, 1])
+			return confetti
+	var trail := CPUParticles2D.new()
+	trail.texture = EFFECT_TEXTURES.get(str(effect.get("texture", "star")), EFFECT_TEXTURES["star"])
+	trail.amount = 22
+	trail.lifetime = 0.9
+	trail.local_coords = false
+	trail.emission_shape = CPUParticles2D.EMISSION_SHAPE_SPHERE
+	trail.emission_sphere_radius = 30.0
+	trail.spread = 180.0
+	trail.initial_velocity_min = 10.0
+	trail.initial_velocity_max = 40.0
+	trail.gravity = Vector2(0.0, -90.0) if effect["id"] == "bubbles" else Vector2(0.0, 60.0)
+	trail.scale_amount_min = 0.25
+	trail.scale_amount_max = 0.45
+	trail.angular_velocity_min = -90.0
+	trail.angular_velocity_max = 90.0
+	trail.color_ramp = _gradient([color, color], [0.95, 0.0])
+	return trail
+
+
+func apply_player_effect() -> void:
+	if is_instance_valid(player_effect_node):
+		player_effect_node.queue_free()
+	player_effect_node = null
+	if selected_effect.is_empty() or not effects_owned.has(selected_effect):
+		return
+	player_effect_node = make_effect_node(selected_effect)
+	if player_effect_node:
+		player_effect_node.name = "PlayerEffect"
+		player_effect_node.position = block.size / 2.0
+		block.add_child(player_effect_node)
+		# Behind the jelly artwork.
+		block.move_child(player_effect_node, 0)
+
+
+func build_chest_picker_tray() -> void:
+	# One matching tray of chests replaces the old mixed-style row.
+	future_chest_row.hide()
+	future_chest_row.visible = false
+	var tray := Panel.new()
+	tray.name = "ChestTray"
+	tray.position = Vector2(14.0, 925.0)
+	tray.size = Vector2(692.0, 150.0)
+	tray.add_theme_stylebox_override("panel", CuteStyle.box(Color(CuteStyle.WHITE, 0.85), 30, CuteStyle.WHITE, 4, 0.15))
+	shop_screen.add_child(tray)
+	future_chest_row = tray
+	for index in range(CHEST_ORDER.size()):
+		var tier := CHEST_ORDER[index]
+		var x := 12.0 + float(index) * 96.0
+		var ring := Panel.new()
+		ring.position = Vector2(x, 6.0)
+		ring.size = Vector2(92.0, 138.0)
+		ring.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		ring.add_theme_stylebox_override("panel", CuteStyle.box(Color(CuteStyle.rarity_color(tier), 0.22), 22, CuteStyle.rarity_color(tier), 4))
+		tray.add_child(ring)
+		chest_picker_rings[tier] = ring
+		var picker := TextureButton.new()
+		picker.name = "Pick_" + tier
+		picker.ignore_texture_size = true
+		picker.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
+		picker.texture_normal = chest_definitions[tier]["texture"]
+		picker.position = Vector2(x + 8.0, 10.0)
+		picker.size = Vector2(76.0, 76.0)
+		picker.pivot_offset = picker.size / 2.0
+		picker.pressed.connect(select_chest.bind(tier))
+		CuteStyle.add_squish(picker)
+		tray.add_child(picker)
+		chest_pickers[tier] = picker
+		var label := Label.new()
+		label.position = Vector2(x - 4.0, 86.0)
+		label.size = Vector2(100.0, 54.0)
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		CuteStyle.style_label(label, CuteStyle.rarity_color(tier).darkened(0.25), 13)
+		tray.add_child(label)
+		chest_picker_labels[tier] = label
+
+
+func build_effects_panel() -> void:
+	effects_panel = Panel.new()
+	effects_panel.name = "EffectsPanel"
+	effects_panel.position = Vector2(40.0, 290.0)
+	effects_panel.size = Vector2(640.0, 640.0)
+	effects_panel.add_theme_stylebox_override("panel", CuteStyle.box(CuteStyle.CREAM, 36, CuteStyle.WHITE, 5, 0.2))
+	effects_panel.hide()
+	shop_screen.add_child(effects_panel)
+	var title := Label.new()
+	title.text = "JELLY EFFECTS"
+	title.position = Vector2(0.0, 16.0)
+	title.size = Vector2(640.0, 44.0)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	CuteStyle.style_label(title, CuteStyle.ACCENT, 32)
+	effects_panel.add_child(title)
+	var ids: Array[String] = [""]
+	for effect in EFFECTS:
+		ids.append(str(effect["id"]))
+	for index in range(ids.size()):
+		var effect_id := ids[index]
+		var card := Button.new()
+		card.name = "Effect_" + (effect_id if not effect_id.is_empty() else "none")
+		card.position = Vector2(22.0 + float(index % 3) * 202.0, 70.0 + float(index / 3) * 176.0)
+		card.size = Vector2(192.0, 166.0)
+		card.pressed.connect(equip_effect.bind(effect_id))
+		effects_panel.add_child(card)
+		var icon := TextureRect.new()
+		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon.position = Vector2(56.0, 12.0)
+		icon.size = Vector2(80.0, 80.0)
+		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		if effect_id.is_empty():
+			icon.texture = create_skin_texture(0)
+		else:
+			icon.texture = effect_icon(effect_id)
+			icon.modulate = effect_color(effect_id)
+		card.add_child(icon)
+		var name_label := Label.new()
+		name_label.text = "NONE" if effect_id.is_empty() else str(EFFECTS[effect_index(effect_id)]["name"])
+		name_label.position = Vector2(4.0, 96.0)
+		name_label.size = Vector2(184.0, 30.0)
+		name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		CuteStyle.style_label(name_label, CuteStyle.INK, 17)
+		card.add_child(name_label)
+		var status := Label.new()
+		status.position = Vector2(4.0, 126.0)
+		status.size = Vector2(184.0, 26.0)
+		status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		status.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		CuteStyle.style_label(status, CuteStyle.INK_SOFT, 14)
+		card.add_child(status)
+		effect_cards[effect_id] = {"card": card, "status": status, "icon": icon}
+
+
+func refresh_effects_panel() -> void:
+	for effect_id in effect_cards.keys():
+		var parts: Dictionary = effect_cards[effect_id]
+		var owned: bool = effect_id.is_empty() or effects_owned.has(effect_id)
+		var equipped: bool = effect_id == selected_effect
+		var card := parts["card"] as Button
+		var color := CuteStyle.ACCENT if equipped else (CuteStyle.WHITE if owned else Color("e3e7ef"))
+		card.add_theme_stylebox_override("normal", CuteStyle.box(Color(color, 0.25 if equipped else 1.0), 26, CuteStyle.ACCENT if equipped else Color("d5dcea"), 4 if equipped else 2))
+		card.add_theme_stylebox_override("hover", card.get_theme_stylebox("normal"))
+		card.add_theme_stylebox_override("pressed", card.get_theme_stylebox("normal"))
+		(parts["status"] as Label).text = "EQUIPPED" if equipped else ("TAP TO USE" if owned else "SPARKLE CHEST")
+		(parts["icon"] as TextureRect).self_modulate = Color.WHITE if owned else Color(0.4, 0.4, 0.45, 0.6)
+
+
+func clear_all_data() -> void:
+	# Wipe progress (scores, jellies, coins, effects, power-ups, name). Sound settings stay.
+	coin_high_score = 0
+	climb_high_score = 0
+	best_height_score = 0
+	high_score = 0
+	wallet_coins = 0
+	unlocked_skins.clear()
+	unlocked_skins.append(0)
+	selected_skin = 0
+	chest_pending_skin = -1
+	effects_owned.clear()
+	selected_effect = ""
+	powerup_inventory.clear()
+	player_name = ""
+	write_save()
+	apply_selected_skin()
+	update_high_score_label()
+	update_coin_counter()
+	build_skin_shop()
+	show_toast("All data cleared")
 
 
 func refresh_powerup_shop() -> void:
@@ -1350,6 +1799,18 @@ func _on_tutorial_closed() -> void:
 
 
 const VERSION_LOG: Array[Dictionary] = [
+	{"version": "1.1.7", "notes": [
+		"16 brand-new seasonal jellies: Fall, Winter, Spring and Summer.",
+		"Clear All Data button in Settings (it asks twice and lists exactly what gets deleted).",
+		"Panda Jelly has its ears back!",
+	]},
+	{"version": "1.0.7", "notes": [
+		"All chests have a matching new look.",
+		"New SPARKLE chest: unlock glows and trails for your jelly, like hearts, bubbles, rainbows and confetti.",
+		"New EFFECTS tab in the Jelly Vault to pick your effect (or none).",
+		"New SEASONAL chest with 16 limited-time jellies across Fall, Winter, Spring and Summer. It's greyed out between seasons.",
+		"Refreshed Jelly Vault menu.",
+	]},
 	{"version": "1.0.6", "notes": [
 		"15 world landmarks in Sky Climb, one per level: Pyramids, Eiffel Tower, Taj Mahal, Leaning Tower of Pisa, Big Ben, Statue of Liberty, Colosseum, Great Wall, Golden Gate Bridge, Sydney Opera House, Mount Fuji, Christ the Redeemer, Machu Picchu, St. Basil's Cathedral and the Space Needle.",
 		"Climb past level 15 to reach outer space!",
@@ -5009,6 +5470,8 @@ func write_save() -> void:
 	save_file.set_value("profile", "wallet_coins", wallet_coins)
 	save_file.set_value("profile", "selected_skin", selected_skin)
 	save_file.set_value("profile", "pending_chest_skin", chest_pending_skin)
+	save_file.set_value("profile", "effects_owned", ",".join(effects_owned))
+	save_file.set_value("profile", "effect", selected_effect)
 	save_file.set_value("profile", "player_name", player_name)
 	save_file.set_value("profile", "tutorial_seen", tutorial_seen)
 	var inventory_parts: Array[String] = []
@@ -5071,9 +5534,18 @@ func load_profile() -> void:
 			var pieces := part.split(":")
 			if pieces.size() == 2 and _is_shop_powerup(pieces[0]) and pieces[1].is_valid_int():
 				powerup_inventory[pieces[0]] = clampi(int(pieces[1]), 0, 999)
+		effects_owned.clear()
+		for effect_text in str(profile_file.get_value("profile", "effects_owned", "")).split(",", false):
+			if effect_index(effect_text) >= 0 and not effects_owned.has(effect_text):
+				effects_owned.append(effect_text)
+		selected_effect = str(profile_file.get_value("profile", "effect", ""))
+		if not effects_owned.has(selected_effect):
+			selected_effect = ""
 		var pending_from_save := int(profile_file.get_value("profile", "pending_chest_skin", -1))
 		if pending_from_save >= 0 and pending_from_save < skin_definitions.size() and not unlocked_skins.has(pending_from_save):
 			unlocked_skins.append(pending_from_save)
+		elif is_effect_reward(pending_from_save) and effect_index(effect_key(pending_from_save)) >= 0:
+			unlock_effect(effect_key(pending_from_save), false)
 		music_volume = clampf(float(profile_file.get_value("settings", "music_volume", music_volume)), 0.0, 1.0)
 		sfx_volume = clampf(float(profile_file.get_value("settings", "sfx_volume", sfx_volume)), 0.0, 1.0)
 		audio_muted = bool(profile_file.get_value("settings", "muted", false))
@@ -5134,6 +5606,7 @@ func apply_selected_skin() -> void:
 	var selected_skin_texture := create_skin_texture(selected_skin)
 
 	jelly_sprite.texture = selected_skin_texture
+	apply_player_effect()
 
 	jelly_base_scale = get_skin_sprite_scale(selected_skin, selected_skin_texture)
 
@@ -5312,6 +5785,7 @@ func buy_or_equip_skin(skin_id: int) -> void:
 
 
 func select_chest(tier_name: String) -> void:
+	refresh_limited_chest()
 
 	# Picking another chest claims any Jelly still waiting from the last one.
 	if chest_claim_button:
@@ -5362,7 +5836,8 @@ func refresh_chest_selection_ui() -> void:
 
 	chest_description.text = str(chest_data["description"])
 
-	common_chest_button.text = "OPEN %s CHEST — %d COINS" % [selected_chest_tier, int(chest_data["cost"])] if is_available else "%s CHEST — COMING SOON" % selected_chest_tier
+	common_chest_button.text = "OPEN %s CHEST — %d COINS" % [chest_display_name(selected_chest_tier), int(chest_data["cost"])] if is_available else "BACK %s" % next_season_text()
+	chest_heading.text = "%s CHEST" % chest_display_name(selected_chest_tier)
 
 	common_chest_button.disabled = chest_rolling or not is_available
 
@@ -5376,6 +5851,18 @@ func refresh_chest_selection_ui() -> void:
 
 		pickers[picker_index].modulate = Color.WHITE if picker_tiers[picker_index] == selected_chest_tier else Color(0.55, 0.55, 0.65, 1.0)
 
+	for tier in chest_pickers.keys():
+		var tier_available := bool(chest_definitions[tier]["available"])
+		var picker := chest_pickers[tier] as TextureButton
+		picker.disabled = chest_rolling
+		picker.texture_normal = chest_definitions[tier]["texture"]
+		# Out-of-season chest is greyed out.
+		picker.modulate = Color.WHITE if tier_available else Color(0.55, 0.55, 0.6, 0.75)
+		picker.scale = Vector2.ONE * (1.12 if tier == selected_chest_tier else 1.0)
+		(chest_picker_rings[tier] as Panel).visible = tier == selected_chest_tier
+		var label := chest_picker_labels[tier] as Label
+		label.text = "%s\n%s" % [chest_display_name(tier), str(chest_definitions[tier]["cost"]) if tier_available else "SOON"]
+
 
 
 
@@ -5386,7 +5873,7 @@ func open_selected_chest() -> void:
 
 	if not bool(chest_data["available"]):
 
-		chest_result_label.text = "%s REWARDS ARE COMING SOON" % selected_chest_tier
+		chest_result_label.text = "SEASONAL JELLIES ARE BACK %s" % next_season_text()
 
 		return
 
@@ -5474,7 +5961,7 @@ func open_chest(tier_name: String, cost: int, reward_pool: Array[int], chest_tex
 
 	for skin_id in reward_pool:
 
-		if not unlocked_skins.has(skin_id):
+		if not reward_owned(skin_id):
 
 			locked_skins.append(skin_id)
 
@@ -5568,7 +6055,8 @@ func prepare_chest_carousel(reward_pool: Array[int], final_skin_id: int = -1) ->
 
 		var carousel_item := TextureButton.new()
 
-		carousel_item.texture_normal = create_skin_texture(reward_id)
+		carousel_item.texture_normal = reward_texture(reward_id)
+		carousel_item.self_modulate = reward_tint(reward_id)
 
 		# Fixed 58 × 64 cards keep every Jelly inside the case-opening strip.
 
@@ -5616,7 +6104,7 @@ func finish_chest() -> void:
 	chest_preview.hide()
 	chest_carousel_backdrop.show()
 	chest_carousel.show()
-	chest_result_label.text = "YOU GOT: %s!" % str(skin_definitions[chest_target_skin]["name"])
+	chest_result_label.text = "YOU GOT: %s!" % reward_name(chest_target_skin)
 	play_sfx(success_sound_player)
 	update_coin_counter()
 	refresh_chest_claim_ui()
@@ -5628,7 +6116,7 @@ func finish_chest() -> void:
 func chest_reroll_candidates() -> Array[int]:
 	var candidates: Array[int] = []
 	for skin_id in chest_reward_pool:
-		if not unlocked_skins.has(skin_id) and skin_id != chest_pending_skin and not candidates.has(skin_id):
+		if not reward_owned(skin_id) and skin_id != chest_pending_skin and not candidates.has(skin_id):
 			candidates.append(skin_id)
 	return candidates
 
@@ -5654,10 +6142,18 @@ func claim_pending_chest() -> void:
 	var skin_id := chest_pending_skin
 	chest_pending_skin = -1
 	chest_reroll_used = false
+	chest_result_label.text = "UNLOCKED: %s!" % reward_name(skin_id)
+	if is_effect_reward(skin_id):
+		unlock_effect(effect_key(skin_id), true)
+		play_sfx(collect_sound_player)
+		save_profile()
+		update_coin_counter()
+		build_skin_shop()
+		refresh_chest_claim_ui()
+		return
 	if not unlocked_skins.has(skin_id):
 		unlocked_skins.append(skin_id)
 	selected_skin = skin_id
-	chest_result_label.text = "UNLOCKED: %s!" % str(skin_definitions[skin_id]["name"])
 	play_sfx(collect_sound_player)
 	apply_selected_skin()
 	save_profile()
@@ -5710,6 +6206,7 @@ func _complete_chest_reroll() -> void:
 
 func open_shop() -> void:
 
+	refresh_limited_chest()
 	build_skin_shop()
 
 	start_screen.hide()
@@ -5826,6 +6323,12 @@ func set_shop_tab(tab_name: String) -> void:
 	var showing_coins := tab_name == "coins"
 
 	var showing_powerups := tab_name == "powerups"
+
+	if effects_panel:
+		effects_panel.visible = tab_name == "effects"
+		effects_tab_button.disabled = tab_name == "effects"
+		if tab_name == "effects":
+			refresh_effects_panel()
 
 	if powerup_panel:
 		powerup_panel.visible = showing_powerups
