@@ -90,6 +90,7 @@ func _run() -> void:
 	await test_powerup_shop()
 	await test_coin_run_round()
 	await test_climb_scenery()
+	await test_hops_and_names()
 	clear_save_files()
 	print("\n%d passed, %d failed" % [passes, failures])
 	quit(1 if failures > 0 else 0)
@@ -685,4 +686,45 @@ func test_climb_scenery() -> void:
 	game.climb_level = 3
 	game.configure_climb_level()
 	check("level 3 has the Taj Mahal", game.climb_scenery.any(func(i): return i["kind"] == "taj"))
+	game.return_to_main_menu()
+
+
+func test_hops_and_names() -> void:
+	for lvl in range(1, 17):
+		game.select_game_mode("CLIMB")
+		game.climb_level = lvl
+		game.configure_climb_level()
+		var expected: String = game.CLIMB_LANDMARKS[lvl - 1] if lvl <= 15 else "planet"
+		if not game.climb_scenery.any(func(i): return i["kind"] == expected):
+			print("   missing scenery for level ", lvl)
+		game.return_to_main_menu()
+	check("15 landmarks plus space", game.CLIMB_LANDMARKS.size() == 15)
+	game.select_game_mode("CLIMB")
+	game.revive_shield_time = 999.0
+	game.is_swinging = false
+	for hop in range(5):
+		game.jump_cooldown_remaining = 0.0
+		game.launch()
+	check("only 3 hops in a row in Sky Climb", game.air_jumps_used == 3)
+	await physics_frame
+	await physics_frame
+	check("hop dots show under Jelly", game.jump_dots.visible and game.jump_dots.used == game.air_jumps_used)
+	game.air_jumps_used = 3
+	game.check_bounce_pads(0.0)
+	game.block.position = game.get_start_pad_position() - Vector2(game.block.size.x * 0.5, 20.0 + game.block.size.y * 0.5)
+	game.bounce_pad_next_trigger_time = 0.0
+	game.check_bounce_pads(game.block.position.y + game.block.size.y)
+	check("a bounce pad refills hops", game.air_jumps_used == 0)
+	var names := {}
+	for bot in game.bot_swings.get_children():
+		names[str(bot.get_meta("name"))] = true
+	check("every racer has a different name", names.size() == game.bot_swings.get_child_count())
+	game.return_to_main_menu()
+	game.select_game_mode("COIN")
+	game.jump_cooldown_remaining = 0.0
+	game.air_jumps_used = 0
+	for hop in range(5):
+		game.jump_cooldown_remaining = 0.0
+		game.launch()
+	check("other modes keep unlimited hops", game.air_jumps_used == 0)
 	game.return_to_main_menu()
