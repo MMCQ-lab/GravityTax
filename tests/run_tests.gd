@@ -41,6 +41,7 @@ func spawn_game() -> void:
 		await process_frame
 	game = load("res://game.tscn").instantiate()
 	game.save_path = TEST_SAVE
+	game.auto_show_tutorial = false
 	root.add_child(game)
 	await wait(0.3)
 
@@ -85,6 +86,7 @@ func _run() -> void:
 	await test_spider_webs()
 	await test_bats_chase_bots()
 	await test_tag_badges()
+	await test_tutorial()
 	clear_save_files()
 	print("\n%d passed, %d failed" % [passes, failures])
 	quit(1 if failures > 0 else 0)
@@ -587,3 +589,17 @@ func test_tag_badges() -> void:
 	check("big banner when you're IT", game.it_banner.visible and game.it_banner.text.begins_with("YOU'RE IT!"))
 	game.return_to_main_menu()
 	check("badges hide on the menu", not game.tag_badges.visible and not game.it_banner.visible)
+
+
+func test_tutorial() -> void:
+	check("? button on the home screen", game.help_button != null and game.help_button.is_visible_in_tree())
+	game.help_button.pressed.emit()
+	check("? opens the guide", game.tutorial.visible and game.tutorial.current_page() == 0)
+	var next := game.tutorial.find_child("NextButton", true, false) as Button
+	for page in range(game.tutorial.pages.size() - 1):
+		next.pressed.emit()
+	check("guide pages through to the end", game.tutorial.current_page() == game.tutorial.pages.size() - 1 and next.text == "LET'S GO!")
+	next.pressed.emit()
+	check("finishing closes it and remembers", not game.tutorial.visible and game.tutorial_seen)
+	await spawn_game()
+	check("seen flag survives a restart", game.tutorial_seen)
