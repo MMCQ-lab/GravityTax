@@ -344,7 +344,18 @@ var skin_definitions: Array[Dictionary] = [
 
 ]
 
-var bot_names: Array[String] = ["Bloop", "Mochi", "Pip", "Zing", "Wobble", "Nori", "Fizz", "Taffy", "Pebble", "Comet", "Pogo", "Doodle"]
+var bot_names: Array[String] = [
+	"Bloop", "Mochi", "Pip", "Zing", "Wobble", "Nori", "Fizz", "Taffy", "Pebble", "Comet", "Pogo", "Doodle",
+	"Biscuit", "Gumdrop", "Sprinkles", "Noodle", "Pickle", "Waffles", "Bubbles", "Jinx", "Ziggy", "Nugget",
+	"Marble", "Pudding", "Sprout", "Twinkle", "Boba", "Kiwi", "Mango", "Peaches", "Pretzel", "Tofu",
+	"Zappy", "Wiggles", "Squish", "Gizmo", "Rascal", "Sunny", "Blitz", "Cosmo", "Dumpling", "Echo",
+	"Flicker", "Gummy", "Hopper", "Jelly Bean", "Kazoo", "Lulu", "Miso", "Nimbus", "Oreo", "Pixel",
+	"Quokka", "Rumble", "Snickers", "Turbo", "Uno", "Velvet", "Wasabi", "Yoyo", "Zest", "Bonbon",
+	"Churro", "Dizzy", "Fudge", "Glimmer", "Honey", "Ink", "Jolt", "Kooky", "Lolly", "Muffin",
+]
+const NAME_STARTS: Array[String] = ["Bo", "Zu", "Mi", "Ka", "Lo", "Pi", "Ru", "Ti", "Fa", "Ne", "Wu", "Ji", "Sho", "Ble", "Gro", "Pla", "Twi", "Squi"]
+const NAME_ENDS: Array[String] = ["bo", "zz", "py", "mo", "ka", "lee", "nk", "x", "doo", "bit", "ples", "gle", "rp", "mi", "tz", "ster"]
+var used_bot_names := {}
 
 var common_chest_cost := 50
 
@@ -473,8 +484,16 @@ var coin_time_left := 0.0
 var coin_time_up := false
 var coin_timer_label: Label
 var coin_winner := ""
+# Sky Climb allows three hops in a row; grabbing an orb or a bounce pad refills them.
+const CLIMB_MAX_AIR_JUMPS := 3
+var air_jumps_used := 0
+var jump_dots: JumpDots
 # Background scenery for the first Sky Climb levels (landmarks, balloons, planes).
 var climb_scenery: Array[Dictionary] = []
+const CLIMB_LANDMARKS: Array[String] = [
+	"pyramids", "eiffel", "taj", "pisa", "bigben", "liberty", "colosseum", "greatwall",
+	"goldengate", "opera", "fuji", "redeemer", "machu", "stbasil", "needle",
+]
 var help_button: Button
 var tutorial: Tutorial
 var tutorial_seen := false
@@ -682,6 +701,11 @@ func _ready() -> void:
 
 	setup_orbiting_knives()
 	build_tag_badges()
+	jump_dots = JumpDots.new()
+	jump_dots.name = "JumpDots"
+	jump_dots.z_index = 15
+	jump_dots.visible = false
+	add_child(jump_dots)
 	spider_webs = Node2D.new()
 	spider_webs.name = "SpiderWebs"
 	add_child(spider_webs)
@@ -998,7 +1022,7 @@ func build_tutorial_pages() -> Array[Dictionary]:
 		{"title": "COIN RUN", "images": [jelly, COMMON_CHEST_TEXTURE],
 			"text": "You have 90 seconds to grab more coins than the other jellies. Coins drift toward you when you're close. Purple orbs fade away, so keep moving!"},
 		{"title": "SKY CLIMB", "images": [PURPLE_ORB_TEXTURE, jelly, PURPLE_ORB_TEXTURE],
-			"text": "Swing higher and higher. Reach the top to start the next level, and each level gets harder. Don't fall into the jam lava!"},
+			"text": "Swing higher and higher past famous landmarks. You get 3 hops in the air (the dots under you). Grab an orb or bounce pad to refill them!"},
 		{"title": "JELLY TAG", "extra": _tutorial_tag_art,
 			"text": "Jellies with a red IT badge are IT. If you're IT, touch another jelly within 30 seconds to pass it on, or you're out. Be the last jelly standing to win!"},
 		{"title": "WATCH OUT!", "extra": _tutorial_danger_art,
@@ -1242,6 +1266,20 @@ func update_coin_timer(delta: float) -> void:
 		end_game()
 
 
+func next_bot_name() -> String:
+	# Mix a big name list with made-up cute names, never repeating within a run.
+	for attempt in range(30):
+		var candidate := ""
+		if randf() < 0.4:
+			candidate = NAME_STARTS.pick_random() + NAME_ENDS.pick_random()
+		else:
+			candidate = bot_names.pick_random()
+		if not used_bot_names.has(candidate):
+			used_bot_names[candidate] = true
+			return candidate
+	return "Jelly %d" % (used_bot_names.size() + 1)
+
+
 func coin_race_winner() -> String:
 	# Empty string means the player has the most coins (ties go to the player).
 	var best_name := ""
@@ -1312,6 +1350,12 @@ func _on_tutorial_closed() -> void:
 
 
 const VERSION_LOG: Array[Dictionary] = [
+	{"version": "1.0.6", "notes": [
+		"15 world landmarks in Sky Climb, one per level: Pyramids, Eiffel Tower, Taj Mahal, Leaning Tower of Pisa, Big Ben, Statue of Liberty, Colosseum, Great Wall, Golden Gate Bridge, Sydney Opera House, Mount Fuji, Christ the Redeemer, Machu Picchu, St. Basil's Cathedral and the Space Needle.",
+		"Climb past level 15 to reach outer space!",
+		"Sky Climb gives you 3 hops in the air. Grab an orb or a bounce pad to get them back. The dots under your jelly show how many you have left.",
+		"Lots more jelly names, and no two the same in a race.",
+	]},
 	{"version": "1.0.5", "notes": [
 		"Power-up shop: buy rockets, warps, magnets and knives in the Jelly Vault, then tap them during a run.",
 		"New shop-only WILD ROCKET flings you in a random direction!",
@@ -1957,6 +2001,10 @@ func _physics_process(delta: float) -> void:
 
 	update_bats(delta)
 	update_spider_webs(delta)
+	jump_dots.visible = active_game_mode == "CLIMB" and not game_over
+	if jump_dots.visible:
+		jump_dots.global_position = get_player_center() + Vector2(0.0, block.size.y * 0.5 + 14.0)
+		jump_dots.set_used(air_jumps_used)
 	if active_game_mode == "COIN":
 		update_orb_lifetimes(delta)
 		update_coin_timer(delta)
@@ -1998,6 +2046,7 @@ func populate_world() -> void:
 		bot.queue_free()
 
 	clear_spider_webs()
+	used_bot_names.clear()
 
 	coin_positions.clear()
 
@@ -2179,6 +2228,7 @@ func check_bounce_pads(block_bottom: float) -> bool:
 			velocity.y = -maxf(absf(velocity.y) * 1.18, bounce_pad_launch_speed)
 
 			bounce_pad_next_trigger_time = world_elapsed + 0.22
+			air_jumps_used = 0
 
 			land()
 
@@ -2221,16 +2271,17 @@ func build_climb_scenery() -> void:
 	# Levels 1-3 each get a famous landmark along the ground plus balloons and
 	# planes drifting at every height. Seeded per level so it never jumps around.
 	climb_scenery.clear()
-	if climb_level > 3:
-		return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 7919 * climb_level
-	var landmark: String = ["pyramids", "eiffel", "taj"][climb_level - 1]
 	var center_x := map_width * 0.5
-	for offset in [-420.0, 2600.0, -3300.0, 5200.0, -5400.0]:
-		climb_scenery.append({"kind": landmark, "pos": Vector2(center_x + offset, floor_y + 20.0)})
+	var in_space := climb_level > CLIMB_LANDMARKS.size()
+	if not in_space:
+		var landmark: String = CLIMB_LANDMARKS[climb_level - 1]
+		for offset in [-420.0, 2600.0, -3300.0, 5200.0, -5400.0]:
+			climb_scenery.append({"kind": landmark, "pos": Vector2(center_x + offset, floor_y + 20.0)})
+	var prop_kinds: Array = ["planet", "moon", "rocket", "satellite", "planet"] if in_space else ["balloon", "balloon", "plane", "kite"]
 	for prop_index in range(70):
-		var kind: String = ["balloon", "balloon", "plane", "kite"][rng.randi() % 4]
+		var kind: String = prop_kinds[rng.randi() % prop_kinds.size()]
 		climb_scenery.append({
 			"kind": kind,
 			"pos": Vector2(rng.randf_range(200.0, map_width - 200.0), rng.randf_range(600.0, floor_y - 1400.0)),
@@ -2241,6 +2292,16 @@ func build_climb_scenery() -> void:
 func draw_climb_scenery(visible_bounds: Rect2) -> void:
 	if active_game_mode != "CLIMB" or climb_scenery.is_empty():
 		return
+	if climb_level > CLIMB_LANDMARKS.size():
+		# Past the last landmark the climb reaches outer space.
+		draw_rect(visible_bounds.grow(64.0), Color(0.04, 0.05, 0.16, 0.82))
+		var star_cell := 140.0
+		for sy in range(floori(visible_bounds.position.y / star_cell), floori(visible_bounds.end.y / star_cell) + 1):
+			for sx in range(floori(visible_bounds.position.x / star_cell), floori(visible_bounds.end.x / star_cell) + 1):
+				var h := hash(Vector2i(sx, sy))
+				var star := Vector2(sx * star_cell + float(h % 140), sy * star_cell + float((h / 140) % 140))
+				var twinkle := 0.5 + 0.5 * sin(world_elapsed * 2.0 + float(h % 31))
+				draw_circle(star, 1.5 + float(h % 3), Color(1.0, 1.0, 1.0, 0.35 + 0.5 * twinkle))
 	var tint := sky_bottom_color.lerp(Color(0.25, 0.3, 0.55), 0.35)
 	var silhouette := Color(tint, 0.55)
 	var shade := Color(tint.darkened(0.15), 0.6)
@@ -2264,6 +2325,38 @@ func draw_climb_scenery(visible_bounds: Rect2) -> void:
 				_draw_plane(at)
 			"kite":
 				_draw_kite(at, float(item["hue"]))
+			"pisa":
+				_draw_pisa(at, silhouette)
+			"bigben":
+				_draw_bigben(at, silhouette, shade)
+			"liberty":
+				_draw_liberty(at, silhouette, shade)
+			"colosseum":
+				_draw_colosseum(at, silhouette, shade)
+			"greatwall":
+				_draw_greatwall(at, silhouette, shade)
+			"goldengate":
+				_draw_goldengate(at, Color(Color("d8705a").lerp(tint, 0.35), 0.6))
+			"opera":
+				_draw_opera(at, silhouette, shade)
+			"fuji":
+				_draw_fuji(at, silhouette, shade)
+			"redeemer":
+				_draw_redeemer(at, silhouette, shade)
+			"machu":
+				_draw_machu(at, silhouette, shade)
+			"stbasil":
+				_draw_stbasil(at, silhouette, shade, float(item.get("hue", 0.0)))
+			"needle":
+				_draw_needle(at, silhouette)
+			"planet":
+				_draw_planet(at, float(item["hue"]))
+			"moon":
+				_draw_moon(at)
+			"rocket":
+				_draw_space_rocket(at)
+			"satellite":
+				_draw_satellite(at)
 
 
 func _draw_pyramid(base: Vector2, height: float, face: Color, side: Color) -> void:
@@ -2361,6 +2454,251 @@ func _draw_kite(at: Vector2, hue: float) -> void:
 		tail = next
 
 
+func _ellipse(center: Vector2, rx: float, ry: float, from_angle := 0.0, to_angle := TAU, steps := 28) -> PackedVector2Array:
+	var points := PackedVector2Array()
+	for i in range(steps + 1):
+		var a := lerpf(from_angle, to_angle, float(i) / float(steps))
+		points.append(center + Vector2(cos(a) * rx, sin(a) * ry))
+	return points
+
+
+func _poly(base: Vector2, points: Array) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	for point in points:
+		out.append(base + (point as Vector2))
+	return out
+
+
+func _draw_pisa(base: Vector2, color: Color) -> void:
+	draw_set_transform(base, deg_to_rad(5.5), Vector2.ONE)
+	var light := Color(1.0, 1.0, 1.0, 0.13)
+	for tier in range(8):
+		var y := -90.0 * float(tier + 1)
+		var width := 150.0 if tier < 7 else 110.0
+		draw_rect(Rect2(Vector2(-width * 0.5, y), Vector2(width, 90.0)), color)
+		draw_rect(Rect2(Vector2(-width * 0.5 - 8.0, y + 80.0), Vector2(width + 16.0, 10.0)), color)
+		for column in range(5):
+			var cx := -width * 0.5 + 16.0 + float(column) * (width - 32.0) / 4.0
+			draw_rect(Rect2(Vector2(cx - 6.0, y + 20.0), Vector2(12.0, 52.0)), light)
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+func _draw_bigben(base: Vector2, color: Color, side: Color) -> void:
+	draw_rect(Rect2(base + Vector2(-620.0, -240.0), Vector2(560.0, 240.0)), side)
+	for i in range(12):
+		draw_rect(Rect2(base + Vector2(-610.0 + float(i) * 46.0, -275.0), Vector2(14.0, 40.0)), side)
+	draw_rect(Rect2(base + Vector2(-75.0, -760.0), Vector2(150.0, 760.0)), color)
+	draw_rect(Rect2(base + Vector2(-95.0, -900.0), Vector2(190.0, 150.0)), color)
+	draw_circle(base + Vector2(0.0, -825.0), 62.0, Color(1.0, 1.0, 1.0, 0.45))
+	draw_line(base + Vector2(0.0, -825.0), base + Vector2(0.0, -868.0), color, 6.0)
+	draw_line(base + Vector2(0.0, -825.0), base + Vector2(30.0, -825.0), color, 6.0)
+	draw_colored_polygon(_poly(base, [Vector2(-95.0, -900.0), Vector2(0.0, -1120.0), Vector2(95.0, -900.0)]), color)
+	draw_rect(Rect2(base + Vector2(-4.0, -1190.0), Vector2(8.0, 80.0)), color)
+
+
+func _draw_liberty(base: Vector2, color: Color, side: Color) -> void:
+	draw_colored_polygon(_poly(base, [Vector2(-200.0, 0.0), Vector2(200.0, 0.0), Vector2(140.0, -160.0), Vector2(-140.0, -160.0)]), side)
+	draw_rect(Rect2(base + Vector2(-100.0, -420.0), Vector2(200.0, 260.0)), side)
+	draw_colored_polygon(_poly(base, [Vector2(-90.0, -420.0), Vector2(90.0, -420.0), Vector2(55.0, -800.0), Vector2(-60.0, -800.0)]), color)
+	draw_circle(base + Vector2(0.0, -840.0), 48.0, color)
+	for spike in range(7):
+		var angle := deg_to_rad(-160.0 + float(spike) * 23.0)
+		var dir := Vector2(cos(angle), sin(angle))
+		draw_colored_polygon(PackedVector2Array([
+			base + Vector2(0.0, -850.0) + dir.orthogonal() * 8.0 + dir * 40.0,
+			base + Vector2(0.0, -850.0) + dir * 95.0,
+			base + Vector2(0.0, -850.0) - dir.orthogonal() * 8.0 + dir * 40.0,
+		]), color)
+	draw_line(base + Vector2(45.0, -760.0), base + Vector2(110.0, -1050.0), color, 34.0)
+	draw_rect(Rect2(base + Vector2(88.0, -1100.0), Vector2(46.0, 40.0)), color)
+	draw_circle(base + Vector2(111.0, -1125.0), 32.0, Color(1.0, 0.85, 0.4, 0.7))
+	draw_rect(Rect2(base + Vector2(-110.0, -720.0), Vector2(60.0, 90.0)), side)
+
+
+func _draw_colosseum(base: Vector2, color: Color, side: Color) -> void:
+	var outline := PackedVector2Array([
+		base + Vector2(-520.0, 0.0), base + Vector2(-520.0, -380.0), base + Vector2(-200.0, -440.0),
+		base + Vector2(180.0, -440.0), base + Vector2(330.0, -330.0), base + Vector2(430.0, -260.0),
+		base + Vector2(520.0, -180.0), base + Vector2(520.0, 0.0),
+	])
+	draw_colored_polygon(outline, color)
+	var arch := Color(1.0, 1.0, 1.0, 0.16)
+	for row in range(3):
+		var y := -100.0 - float(row) * 110.0
+		for column in range(11):
+			var x := -480.0 + float(column) * 90.0
+			if row == 2 and x > 250.0:
+				continue
+			if row == 1 and x > 400.0:
+				continue
+			draw_rect(Rect2(base + Vector2(x, y), Vector2(42.0, 62.0)), arch)
+			draw_circle(base + Vector2(x + 21.0, y), 21.0, arch)
+	draw_rect(Rect2(base + Vector2(-540.0, -20.0), Vector2(1080.0, 20.0)), side)
+
+
+func _draw_greatwall(base: Vector2, color: Color, side: Color) -> void:
+	var hills := PackedVector2Array([base + Vector2(-700.0, 0.0)])
+	var wall := PackedVector2Array()
+	for i in range(15):
+		var x := -700.0 + float(i) * 100.0
+		var y := -180.0 - sin(float(i) * 0.7) * 160.0 - float(i % 3) * 20.0
+		hills.append(base + Vector2(x, y + 30.0))
+		wall.append(base + Vector2(x, y))
+	hills.append(base + Vector2(700.0, 0.0))
+	draw_colored_polygon(hills, side)
+	draw_polyline(wall, color, 36.0, true)
+	for i in range(0, wall.size(), 4):
+		draw_rect(Rect2(wall[i] + Vector2(-34.0, -110.0), Vector2(68.0, 100.0)), color)
+		draw_colored_polygon(PackedVector2Array([wall[i] + Vector2(-44.0, -110.0), wall[i] + Vector2(0.0, -150.0), wall[i] + Vector2(44.0, -110.0)]), color)
+	for i in range(wall.size()):
+		draw_rect(Rect2(wall[i] + Vector2(-10.0, -34.0), Vector2(14.0, 14.0)), color)
+
+
+func _draw_goldengate(base: Vector2, color: Color) -> void:
+	var deck_y := -260.0
+	for tower_x in [-300.0, 300.0]:
+		draw_rect(Rect2(base + Vector2(tower_x - 50.0, -860.0), Vector2(30.0, 860.0)), color)
+		draw_rect(Rect2(base + Vector2(tower_x + 20.0, -860.0), Vector2(30.0, 860.0)), color)
+		for bar_y in [-840.0, -660.0, -480.0]:
+			draw_rect(Rect2(base + Vector2(tower_x - 50.0, bar_y), Vector2(100.0, 24.0)), color)
+	draw_rect(Rect2(base + Vector2(-760.0, deck_y), Vector2(1520.0, 26.0)), color)
+	var main_cable := PackedVector2Array()
+	for i in range(31):
+		var t := float(i) / 30.0
+		var x := lerpf(-300.0, 300.0, t)
+		main_cable.append(base + Vector2(x, -840.0 + 560.0 * (1.0 - pow(2.0 * t - 1.0, 2.0))))
+	draw_polyline(main_cable, color, 8.0, true)
+	for side_x in [-1.0, 1.0]:
+		var side_cable := PackedVector2Array()
+		for i in range(16):
+			var t := float(i) / 15.0
+			side_cable.append(base + Vector2(side_x * lerpf(300.0, 760.0, t), lerpf(-840.0, deck_y, sqrt(t))))
+		draw_polyline(side_cable, color, 8.0, true)
+	for i in range(1, 30, 2):
+		draw_line(main_cable[i], Vector2(main_cable[i].x, base.y + deck_y), color, 2.0)
+
+
+func _draw_opera(base: Vector2, color: Color, side: Color) -> void:
+	draw_rect(Rect2(base + Vector2(-620.0, -110.0), Vector2(1240.0, 110.0)), side)
+	# Pointed shell "sails" leaning the same way, largest in the middle.
+	var sails := [[-480.0, 260.0, 420.0], [-250.0, 300.0, 600.0], [20.0, 280.0, 520.0], [270.0, 230.0, 400.0], [470.0, 170.0, 280.0]]
+	for sail in sails:
+		var x: float = sail[0]
+		var w: float = sail[1]
+		var h: float = sail[2]
+		var tip := Vector2(x + w * 0.78, -110.0 - h)
+		var points := PackedVector2Array([base + Vector2(x, -110.0)])
+		for i in range(1, 12):
+			var t := float(i) / 12.0
+			var curve := Vector2(x, -110.0).lerp(tip, t) + Vector2(-sin(t * PI) * w * 0.18, -sin(t * PI) * h * 0.12)
+			points.append(base + curve)
+		points.append(base + tip)
+		points.append(base + Vector2(x + w, -110.0))
+		draw_colored_polygon(points, color)
+		draw_polyline(points, Color(1.0, 1.0, 1.0, 0.3), 3.0, true)
+
+
+func _draw_fuji(base: Vector2, color: Color, side: Color) -> void:
+	var mountain := _poly(base, [Vector2(-900.0, 0.0), Vector2(-180.0, -880.0), Vector2(-90.0, -910.0), Vector2(90.0, -910.0), Vector2(180.0, -880.0), Vector2(900.0, 0.0)])
+	draw_colored_polygon(mountain, color)
+	draw_colored_polygon(_poly(base, [Vector2(-180.0, -880.0), Vector2(-90.0, -910.0), Vector2(90.0, -910.0), Vector2(180.0, -880.0), Vector2(300.0, -730.0), Vector2(180.0, -760.0), Vector2(90.0, -700.0), Vector2(0.0, -760.0), Vector2(-110.0, -690.0), Vector2(-200.0, -760.0), Vector2(-300.0, -730.0)]), Color(1.0, 1.0, 1.0, 0.75))
+	# A small pagoda in front.
+	var px := 520.0
+	for tier in range(5):
+		var y := -60.0 - float(tier) * 70.0
+		var w := 150.0 - float(tier) * 18.0
+		draw_rect(Rect2(base + Vector2(px - w * 0.35, y - 50.0), Vector2(w * 0.7, 50.0)), side)
+		draw_colored_polygon(_poly(base, [Vector2(px - w * 0.62, y - 40.0), Vector2(px + w * 0.62, y - 40.0), Vector2(px + w * 0.35, y - 70.0), Vector2(px - w * 0.35, y - 70.0)]), side)
+	draw_rect(Rect2(base + Vector2(px - 4.0, -480.0), Vector2(8.0, 90.0)), side)
+
+
+func _draw_redeemer(base: Vector2, color: Color, side: Color) -> void:
+	draw_colored_polygon(_poly(base, [Vector2(-800.0, 0.0), Vector2(-300.0, -420.0), Vector2(-90.0, -620.0), Vector2(90.0, -620.0), Vector2(260.0, -480.0), Vector2(800.0, 0.0)]), side)
+	draw_rect(Rect2(base + Vector2(-40.0, -680.0), Vector2(80.0, 60.0)), color)
+	draw_colored_polygon(_poly(base, [Vector2(-44.0, -680.0), Vector2(44.0, -680.0), Vector2(30.0, -940.0), Vector2(-30.0, -940.0)]), color)
+	draw_rect(Rect2(base + Vector2(-230.0, -930.0), Vector2(460.0, 44.0)), color)
+	draw_circle(base + Vector2(0.0, -975.0), 34.0, color)
+
+
+func _draw_machu(base: Vector2, color: Color, side: Color) -> void:
+	draw_colored_polygon(_poly(base, [Vector2(200.0, 0.0), Vector2(420.0, -720.0), Vector2(520.0, -780.0), Vector2(620.0, -700.0), Vector2(820.0, 0.0)]), side)
+	var terraces := PackedVector2Array([base + Vector2(-760.0, 0.0)])
+	for step in range(9):
+		var x := -760.0 + float(step) * 80.0
+		var y := -float(step) * 55.0
+		terraces.append(base + Vector2(x, y - 55.0))
+		terraces.append(base + Vector2(x + 80.0, y - 55.0))
+	terraces.append(base + Vector2(300.0, -495.0))
+	terraces.append(base + Vector2(400.0, 0.0))
+	draw_colored_polygon(terraces, color)
+	for hut in range(5):
+		var hx := -60.0 + float(hut) * 70.0
+		draw_rect(Rect2(base + Vector2(hx, -560.0), Vector2(50.0, 50.0)), side)
+		draw_colored_polygon(_poly(base, [Vector2(hx - 6.0, -560.0), Vector2(hx + 25.0, -600.0), Vector2(hx + 56.0, -560.0)]), side)
+
+
+func _draw_stbasil(base: Vector2, color: Color, side: Color, _hue: float) -> void:
+	draw_rect(Rect2(base + Vector2(-380.0, -220.0), Vector2(760.0, 220.0)), side)
+	var domes := [[-280.0, 470.0, 70.0, 0.02], [-140.0, 560.0, 80.0, 0.55], [0.0, 760.0, 100.0, 0.3], [140.0, 560.0, 80.0, 0.8], [280.0, 470.0, 70.0, 0.12]]
+	for dome in domes:
+		var x: float = dome[0]
+		var h: float = dome[1]
+		var r: float = dome[2]
+		var tint := Color.from_hsv(float(dome[3]), 0.4, 1.0, 0.55)
+		draw_rect(Rect2(base + Vector2(x - r * 0.55, -h), Vector2(r * 1.1, h - 200.0)), color)
+		draw_circle(base + Vector2(x, -h - r * 0.5), r, tint)
+		draw_colored_polygon(_poly(base, [Vector2(x - r * 0.75, -h - r * 0.9), Vector2(x, -h - r * 2.3), Vector2(x + r * 0.75, -h - r * 0.9)]), tint)
+		for stripe in range(-1, 2):
+			draw_line(base + Vector2(x + float(stripe) * r * 0.45, -h + r * 0.3), base + Vector2(x, -h - r * 2.0), Color(1.0, 1.0, 1.0, 0.3), 4.0)
+		draw_rect(Rect2(base + Vector2(x - 3.0, -h - r * 2.3 - 40.0), Vector2(6.0, 40.0)), color)
+
+
+func _draw_needle(base: Vector2, color: Color) -> void:
+	draw_colored_polygon(_poly(base, [Vector2(-130.0, 0.0), Vector2(-80.0, 0.0), Vector2(-14.0, -820.0), Vector2(-40.0, -820.0)]), color)
+	draw_colored_polygon(_poly(base, [Vector2(80.0, 0.0), Vector2(130.0, 0.0), Vector2(40.0, -820.0), Vector2(14.0, -820.0)]), color)
+	draw_rect(Rect2(base + Vector2(-26.0, -820.0), Vector2(52.0, 820.0)), color)
+	draw_rect(Rect2(base + Vector2(-70.0, -300.0), Vector2(140.0, 18.0)), color)
+	draw_colored_polygon(_ellipse(base + Vector2(0.0, -860.0), 210.0, 46.0), color)
+	draw_colored_polygon(_ellipse(base + Vector2(0.0, -905.0), 130.0, 34.0), color)
+	draw_rect(Rect2(base + Vector2(-6.0, -1080.0), Vector2(12.0, 160.0)), color)
+
+
+func _draw_planet(at: Vector2, hue: float) -> void:
+	var body := Color.from_hsv(hue, 0.45, 0.95, 0.85)
+	var ring := Color.from_hsv(fmod(hue + 0.15, 1.0), 0.3, 1.0, 0.7)
+	draw_polyline(_ellipse(at, 150.0, 34.0, PI, TAU), ring, 10.0, true)
+	draw_circle(at, 90.0, body)
+	draw_circle(at + Vector2(-26.0, -24.0), 28.0, Color(1.0, 1.0, 1.0, 0.18))
+	draw_polyline(_ellipse(at, 150.0, 34.0, 0.0, PI), ring, 10.0, true)
+
+
+func _draw_moon(at: Vector2) -> void:
+	draw_circle(at, 110.0, Color(0.93, 0.93, 0.85, 0.85))
+	for crater in [Vector2(-40.0, -30.0), Vector2(35.0, 20.0), Vector2(-10.0, 55.0), Vector2(50.0, -50.0)]:
+		draw_circle(at + crater, 18.0, Color(0.75, 0.75, 0.7, 0.8))
+
+
+func _draw_space_rocket(at: Vector2) -> void:
+	var lift := fmod(world_elapsed * 40.0 + at.x, 900.0)
+	var p := at - Vector2(0.0, lift)
+	draw_colored_polygon(_poly(p, [Vector2(-26.0, 60.0), Vector2(-26.0, -40.0), Vector2(0.0, -95.0), Vector2(26.0, -40.0), Vector2(26.0, 60.0)]), Color(0.95, 0.95, 1.0, 0.9))
+	draw_circle(p + Vector2(0.0, -20.0), 12.0, Color("8ec5ff"))
+	draw_colored_polygon(_poly(p, [Vector2(-26.0, 30.0), Vector2(-52.0, 72.0), Vector2(-26.0, 60.0)]), Color("ff7a8a"))
+	draw_colored_polygon(_poly(p, [Vector2(26.0, 30.0), Vector2(52.0, 72.0), Vector2(26.0, 60.0)]), Color("ff7a8a"))
+	draw_colored_polygon(_poly(p, [Vector2(-16.0, 62.0), Vector2(0.0, 110.0 + sin(world_elapsed * 20.0) * 10.0), Vector2(16.0, 62.0)]), Color(1.0, 0.75, 0.3, 0.9))
+
+
+func _draw_satellite(at: Vector2) -> void:
+	var spin := world_elapsed * 0.4 + at.x
+	draw_set_transform(at, spin, Vector2.ONE)
+	draw_rect(Rect2(Vector2(-22.0, -22.0), Vector2(44.0, 44.0)), Color(0.85, 0.85, 0.9, 0.9))
+	draw_rect(Rect2(Vector2(-110.0, -14.0), Vector2(80.0, 28.0)), Color("5a8dee", 0.85))
+	draw_rect(Rect2(Vector2(30.0, -14.0), Vector2(80.0, 28.0)), Color("5a8dee", 0.85))
+	draw_line(Vector2(0.0, -22.0), Vector2(0.0, -50.0), Color.WHITE, 3.0)
+	draw_circle(Vector2(0.0, -52.0), 6.0, Color.WHITE)
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
 func configure_standard_world() -> void:
 	floor_y = 9000.0
 	floor_rect.position = Vector2(0.0, floor_y)
@@ -2387,6 +2725,7 @@ func advance_climb_level() -> void:
 	previous_player_center = get_player_center()
 	update_height_score()
 	show_power_message("LEVEL %d  •  CLIMB HIGHER!" % climb_level)
+	air_jumps_used = 0
 
 
 
@@ -2472,7 +2811,7 @@ func spawn_swing_bot(anchor_position: Vector2, bot_number: int) -> void:
 
 	var bot_skin_id := randi_range(0, skin_definitions.size() - 1)
 
-	bot.set_meta("name", bot_names.pick_random())
+	bot.set_meta("name", next_bot_name())
 
 	bot.set_meta("magnet_until", 0.0)
 
@@ -4209,6 +4548,7 @@ func revive_player() -> void:
 	game_over = false
 	game_over_finalized = false
 	show_power_message("REVIVED!")
+	air_jumps_used = 0
 	refresh_powerup_bar()
 	play_sfx(revive_sound_player)
 	if not background_music_player.playing:
@@ -4340,6 +4680,7 @@ func restart_game() -> void:
 	coin_time_left = COIN_RUN_SECONDS
 	coin_time_up = false
 	coin_winner = ""
+	air_jumps_used = 0
 	call_deferred("refresh_powerup_bar")
 
 	bounce_pad_next_trigger_time = 0.0
@@ -4390,6 +4731,7 @@ func restart_game() -> void:
 func return_to_main_menu() -> void:
 
 	tag_badges.visible = false
+	jump_dots.visible = false
 	it_banner.hide()
 	coin_timer_label.hide()
 	powerup_bar.hide()
@@ -5654,6 +5996,7 @@ func begin_swing() -> void:
 
 
 	is_swinging = true
+	air_jumps_used = 0
 
 	play_sfx(swoosh_sound_player)
 
@@ -5718,6 +6061,12 @@ func launch() -> void:
 	if jump_cooldown_remaining > 0.0:
 
 		return
+
+	if active_game_mode == "CLIMB":
+		if air_jumps_used >= CLIMB_MAX_AIR_JUMPS:
+			show_power_message("NO HOPS LEFT! GRAB AN ORB!")
+			return
+		air_jumps_used += 1
 
 	is_swinging = false
 
