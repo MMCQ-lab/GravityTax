@@ -8,6 +8,7 @@ signal settings_changed(music: float, sfx: float, muted: bool)
 signal resume_requested
 signal home_requested
 signal name_changed(player_name: String)
+signal clear_data_confirmed
 
 var _card: Panel
 var _title: Label
@@ -20,6 +21,13 @@ var _home_button: Button
 var _pause_mode := false
 var _credits_button: Button
 var _credits_layer: Control
+var _clear_button: Button
+var _confirm_layer: ColorRect
+var _confirm_title: Label
+var _confirm_body: Label
+var _confirm_yes: Button
+var _confirm_step := 0
+const CLEAR_DATA_LIST := "This deletes:\n\n•  All high scores (Coin Run and Sky Climb)\n•  Every unlocked jelly (back to the starter jelly)\n•  All coins in your Coin Bank\n•  Unlocked effects and bought power-ups\n•  Your name\n\nSound settings are kept."
 var credits_text := ""
 var version_log_text := ""
 var _whats_new_button: Button
@@ -109,6 +117,17 @@ func _ready() -> void:
 	)
 	_card.add_child(_home_button)
 
+	# Only on the main-menu Settings, never mid-run.
+	_clear_button = Button.new()
+	_clear_button.name = "ClearDataButton"
+	_clear_button.text = "CLEAR ALL DATA"
+	_clear_button.position = Vector2(150.0, 652.0)
+	_clear_button.size = Vector2(260.0, 60.0)
+	_clear_button.add_theme_font_size_override("font_size", 20)
+	CuteStyle.style_button(_clear_button, Color("e8576a"))
+	_clear_button.pressed.connect(_ask_clear_data)
+	_card.add_child(_clear_button)
+
 	_credits_button = Button.new()
 	_credits_button.text = "CREDITS & LICENSES"
 	_credits_button.flat = true
@@ -169,6 +188,55 @@ func _ready() -> void:
 	CuteStyle.style_button(close_credits, CuteStyle.LAVENDER)
 	close_credits.pressed.connect(func() -> void: _credits_layer.hide())
 	_credits_layer.add_child(close_credits)
+
+	# Two-step "are you sure?" for clearing data.
+	_confirm_layer = ColorRect.new()
+	_confirm_layer.name = "ClearDataConfirm"
+	_confirm_layer.color = Color(CuteStyle.INK, 0.55)
+	_confirm_layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_confirm_layer.mouse_filter = Control.MOUSE_FILTER_STOP
+	_confirm_layer.hide()
+	dim.add_child(_confirm_layer)
+	var box := Panel.new()
+	box.add_theme_stylebox_override("panel", CuteStyle.box(CuteStyle.CREAM, 40, Color("e8576a"), 6, 0.3))
+	box.set_anchors_preset(Control.PRESET_CENTER)
+	box.offset_left = -290.0
+	box.offset_right = 290.0
+	box.offset_top = -330.0
+	box.offset_bottom = 330.0
+	_confirm_layer.add_child(box)
+	_confirm_title = Label.new()
+	_confirm_title.position = Vector2(20.0, 28.0)
+	_confirm_title.size = Vector2(540.0, 60.0)
+	_confirm_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	CuteStyle.style_label(_confirm_title, Color("d63a50"), 36)
+	box.add_child(_confirm_title)
+	_confirm_body = Label.new()
+	_confirm_body.position = Vector2(40.0, 100.0)
+	_confirm_body.size = Vector2(500.0, 380.0)
+	_confirm_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	CuteStyle.style_label(_confirm_body, CuteStyle.INK, 22)
+	box.add_child(_confirm_body)
+	_confirm_yes = Button.new()
+	_confirm_yes.name = "ConfirmClear"
+	_confirm_yes.position = Vector2(300.0, 540.0)
+	_confirm_yes.size = Vector2(250.0, 84.0)
+	_confirm_yes.add_theme_font_size_override("font_size", 22)
+	CuteStyle.style_button(_confirm_yes, Color("e8576a"))
+	_confirm_yes.pressed.connect(_on_confirm_clear)
+	box.add_child(_confirm_yes)
+	var cancel := Button.new()
+	cancel.name = "CancelClear"
+	cancel.text = "KEEP MY STUFF"
+	cancel.position = Vector2(30.0, 540.0)
+	cancel.size = Vector2(250.0, 84.0)
+	cancel.add_theme_font_size_override("font_size", 22)
+	CuteStyle.style_button(cancel, CuteStyle.MINT)
+	cancel.pressed.connect(func() -> void:
+		_confirm_step = 0
+		_confirm_layer.hide()
+	)
+	box.add_child(cancel)
 func _add_label(text: String, pos: Vector2, label_size: Vector2, font_size: int, color: Color, align: HorizontalAlignment = HORIZONTAL_ALIGNMENT_CENTER) -> Label:
 	var label := Label.new()
 	label.text = text
@@ -200,7 +268,10 @@ func open(pause_mode: bool, music: float, sfx: float, muted: bool, player_name: 
 	_title.text = "PAUSED" if pause_mode else "SETTINGS"
 	_primary_button.text = "RESUME" if pause_mode else "DONE"
 	_home_button.visible = pause_mode
-	var card_height := 820.0 if pause_mode else 720.0
+	_clear_button.visible = not pause_mode
+	_confirm_layer.hide()
+	_confirm_step = 0
+	var card_height := 820.0 if pause_mode else 790.0
 	# Centre with offsets (relative to the centre anchor), not position.
 	_card.offset_left = -280.0
 	_card.offset_right = 280.0
@@ -241,6 +312,28 @@ func _refresh_mute_look() -> void:
 	var muted := _mute_toggle.button_pressed
 	_mute_toggle.text = "ON" if muted else "OFF"
 	CuteStyle.style_button(_mute_toggle, CuteStyle.CORAL if muted else Color("b7c3d6"))
+
+
+func _ask_clear_data() -> void:
+	_confirm_step = 1
+	_confirm_title.text = "CLEAR ALL DATA?"
+	_confirm_body.text = CLEAR_DATA_LIST
+	_confirm_yes.text = "DELETE"
+	_confirm_layer.show()
+
+
+func _on_confirm_clear() -> void:
+	if _confirm_step == 1:
+		# Second, final check.
+		_confirm_step = 2
+		_confirm_title.text = "ARE YOU SURE?"
+		_confirm_body.text = "Your high scores, jellies, coins, effects and power-ups will be gone for good.\n\nThis can't be undone."
+		_confirm_yes.text = "YES, DELETE ALL"
+		return
+	_confirm_step = 0
+	_confirm_layer.hide()
+	_name_edit.text = ""
+	clear_data_confirmed.emit()
 
 
 func _emit_name() -> void:
