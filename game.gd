@@ -448,6 +448,33 @@ var audio_muted := false
 var settings_panel: SettingsPanel
 var pause_button: Button
 var settings_button: Button
+# Power-ups bought in the shop, used from a bar during a run.
+const POWERUP_SHOP: Array[Dictionary] = [
+	{"kind": "rocket", "name": "ROCKET", "desc": "Blast straight up.", "price": 40},
+	{"kind": "teleport", "name": "WARP", "desc": "Jump somewhere new.", "price": 30},
+	{"kind": "magnet", "name": "MAGNET", "desc": "Pull in coins for 8 seconds.", "price": 50},
+	{"kind": "knife", "name": "KNIVES", "desc": "Spinning blades for 10 seconds.", "price": 60},
+	{"kind": "wild", "name": "WILD ROCKET", "desc": "Random direction! Shop only.", "price": 75},
+]
+const WILD_ROCKET_TINT := Color("d77bff")
+var powerup_inventory := {}
+var powerups_tab_button: Button
+var powerup_panel: Panel
+var powerup_rows := {}
+var powerup_bar: HBoxContainer
+# Coin Run is a timed round with orbs that fade away and pop up elsewhere.
+const COIN_RUN_SECONDS := 90.0
+const COIN_SUCTION_RADIUS := 140.0
+const COIN_SUCTION_SPEED := 300.0
+const ORB_LIFE_MIN := 12.0
+const ORB_LIFE_MAX := 28.0
+const ORB_FADE_SECONDS := 2.0
+var coin_time_left := 0.0
+var coin_time_up := false
+var coin_timer_label: Label
+var coin_winner := ""
+# Background scenery for the first Sky Climb levels (landmarks, balloons, planes).
+var climb_scenery: Array[Dictionary] = []
 var help_button: Button
 var tutorial: Tutorial
 var tutorial_seen := false
@@ -718,6 +745,7 @@ func _ready() -> void:
 	select_chest("COMMON")
 	apply_cute_ui()
 	build_pause_and_settings()
+	build_powerup_ui()
 	apply_wide_layout()
 	apply_safe_area()
 	apply_audio_settings()
@@ -968,7 +996,7 @@ func build_tutorial_pages() -> Array[Dictionary]:
 		{"title": "HOW TO PLAY", "images": [jelly, PURPLE_ORB_TEXTURE],
 			"text": "TAP to hop.\nHOLD to grab the nearest purple orb and swing.\nLET GO to fling yourself through the sky!"},
 		{"title": "COIN RUN", "images": [jelly, COMMON_CHEST_TEXTURE],
-			"text": "Race the other jellies for coins. Grab as many as you can before you fall. Coins you collect go in your bank."},
+			"text": "You have 90 seconds to grab more coins than the other jellies. Coins drift toward you when you're close. Purple orbs fade away, so keep moving!"},
 		{"title": "SKY CLIMB", "images": [PURPLE_ORB_TEXTURE, jelly, PURPLE_ORB_TEXTURE],
 			"text": "Swing higher and higher. Reach the top to start the next level, and each level gets harder. Don't fall into the jam lava!"},
 		{"title": "JELLY TAG", "extra": _tutorial_tag_art,
@@ -976,7 +1004,7 @@ func build_tutorial_pages() -> Array[Dictionary]:
 		{"title": "WATCH OUT!", "extra": _tutorial_danger_art,
 			"text": "Bats chase you if you get close. From Sky Climb level 2, spider webs stick you in place, so TAP FAST to break free!"},
 		{"title": "POWER-UPS", "images": [ROCKET_TEXTURE, TELEPORT_TEXTURE, MAGNET_TEXTURE, KNIFE_TEXTURE],
-			"text": "Rocket boosts you up. Warp jumps you somewhere new. Magnet pulls in coins. Spinning knives beat bats and slice spider webs."},
+			"text": "Grab them in the sky, or buy them in the Jelly Vault and tap them during a run. Spinning knives beat bats and slice spider webs!"},
 		{"title": "COLLECT JELLIES", "images": [COMMON_CHEST_TEXTURE, UNCOMMON_CHEST_TEXTURE, jelly],
 			"text": "Spend coins on chests in the Jelly Vault to unlock 50 jellies. After every run, spin the lucky wheel for bonus coins!"},
 	]
@@ -1021,6 +1049,253 @@ func _tutorial_danger_art() -> Node:
 	return holder
 
 
+func _is_shop_powerup(kind: String) -> bool:
+	for item in POWERUP_SHOP:
+		if item["kind"] == kind:
+			return true
+	return false
+
+
+func powerup_icon(kind: String) -> Texture2D:
+	match kind:
+		"rocket", "wild": return ROCKET_TEXTURE
+		"teleport": return TELEPORT_TEXTURE
+		"magnet": return MAGNET_TEXTURE
+	return KNIFE_TEXTURE
+
+
+func build_powerup_ui() -> void:
+	# Four shop tabs now share the row: Chests, Jellies, Power-ups, Free Coins.
+	chest_tab_button.position = Vector2(28.0, 195.0)
+	chest_tab_button.size = Vector2(158.0, 80.0)
+	jelly_tab_button.position = Vector2(194.0, 195.0)
+	jelly_tab_button.size = Vector2(158.0, 80.0)
+	coins_tab_button.position = Vector2(534.0, 195.0)
+	coins_tab_button.size = Vector2(158.0, 80.0)
+	for tab in [chest_tab_button, jelly_tab_button, coins_tab_button]:
+		(tab as Button).add_theme_font_size_override("font_size", 19)
+	coins_tab_button.text = "FREE\nCOINS"
+	powerups_tab_button = Button.new()
+	powerups_tab_button.name = "PowerupsTabButton"
+	powerups_tab_button.text = "POWER-\nUPS"
+	powerups_tab_button.position = Vector2(360.0, 195.0)
+	powerups_tab_button.size = Vector2(166.0, 80.0)
+	powerups_tab_button.add_theme_font_size_override("font_size", 19)
+	CuteStyle.style_tab(powerups_tab_button, CuteStyle.SKY)
+	powerups_tab_button.pressed.connect(set_shop_tab.bind("powerups"))
+	shop_screen.add_child(powerups_tab_button)
+
+	powerup_panel = Panel.new()
+	powerup_panel.name = "PowerupPanel"
+	powerup_panel.position = Vector2(40.0, 290.0)
+	powerup_panel.size = Vector2(640.0, 640.0)
+	powerup_panel.add_theme_stylebox_override("panel", CuteStyle.box(CuteStyle.CREAM, 36, CuteStyle.WHITE, 5, 0.2))
+	powerup_panel.hide()
+	shop_screen.add_child(powerup_panel)
+	var row_y := 22.0
+	for item in POWERUP_SHOP:
+		var kind := str(item["kind"])
+		var icon := TextureRect.new()
+		icon.texture = powerup_icon(kind)
+		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon.position = Vector2(22.0, row_y)
+		icon.size = Vector2(96.0, 96.0)
+		if kind == "wild":
+			icon.modulate = WILD_ROCKET_TINT
+			icon.rotation_degrees = 35.0
+			icon.pivot_offset = icon.size / 2.0
+		powerup_panel.add_child(icon)
+		var title := Label.new()
+		title.text = str(item["name"])
+		title.position = Vector2(132.0, row_y + 2.0)
+		title.size = Vector2(300.0, 36.0)
+		CuteStyle.style_label(title, WILD_ROCKET_TINT.darkened(0.25) if kind == "wild" else CuteStyle.ACCENT, 26)
+		powerup_panel.add_child(title)
+		var desc := Label.new()
+		desc.text = str(item["desc"])
+		desc.position = Vector2(132.0, row_y + 38.0)
+		desc.size = Vector2(300.0, 50.0)
+		desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		CuteStyle.style_label(desc, CuteStyle.INK_SOFT, 16)
+		powerup_panel.add_child(desc)
+		var owned := Label.new()
+		owned.position = Vector2(132.0, row_y + 84.0)
+		owned.size = Vector2(300.0, 24.0)
+		CuteStyle.style_label(owned, CuteStyle.INK, 16)
+		powerup_panel.add_child(owned)
+		var buy := Button.new()
+		buy.name = "Buy_" + kind
+		buy.text = "BUY  %d" % int(item["price"])
+		buy.position = Vector2(448.0, row_y + 20.0)
+		buy.size = Vector2(170.0, 72.0)
+		buy.add_theme_font_size_override("font_size", 24)
+		CuteStyle.style_button(buy, CuteStyle.MINT)
+		buy.pressed.connect(buy_powerup.bind(kind))
+		powerup_panel.add_child(buy)
+		powerup_rows[kind] = {"owned": owned, "buy": buy}
+		row_y += 122.0
+
+	# In-run bar of owned power-ups, bottom-left (banner ads never show in a run).
+	powerup_bar = HBoxContainer.new()
+	powerup_bar.name = "PowerupBar"
+	powerup_bar.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	powerup_bar.offset_left = 18.0
+	powerup_bar.offset_right = 700.0
+	powerup_bar.offset_top = -118.0
+	powerup_bar.offset_bottom = -22.0
+	powerup_bar.add_theme_constant_override("separation", 12)
+	powerup_bar.hide()
+	$HUD.add_child(powerup_bar)
+	for item in POWERUP_SHOP:
+		var kind := str(item["kind"])
+		var use_button := Button.new()
+		use_button.name = "Use_" + kind
+		use_button.custom_minimum_size = Vector2(96.0, 96.0)
+		use_button.icon = powerup_icon(kind)
+		use_button.expand_icon = true
+		use_button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		use_button.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
+		use_button.add_theme_font_size_override("font_size", 18)
+		use_button.add_theme_constant_override("icon_max_width", 60)
+		CuteStyle.style_button(use_button, Color(WILD_ROCKET_TINT, 0.95) if kind == "wild" else Color(CuteStyle.WHITE, 0.92), CuteStyle.INK)
+		if kind == "wild":
+			use_button.add_theme_color_override("icon_normal_color", WILD_ROCKET_TINT)
+			use_button.add_theme_color_override("icon_pressed_color", WILD_ROCKET_TINT)
+			use_button.add_theme_color_override("icon_hover_color", WILD_ROCKET_TINT)
+		use_button.pressed.connect(use_powerup.bind(kind))
+		powerup_bar.add_child(use_button)
+
+	coin_timer_label = Label.new()
+	coin_timer_label.name = "CoinTimer"
+	coin_timer_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	coin_timer_label.position = Vector2(270.0, 104.0)
+	coin_timer_label.size = Vector2(180.0, 50.0)
+	CuteStyle.pill_label(coin_timer_label, Color(CuteStyle.WHITE, 0.95), CuteStyle.INK)
+	coin_timer_label.add_theme_font_size_override("font_size", 28)
+	coin_timer_label.hide()
+	$HUD.add_child(coin_timer_label)
+
+
+func refresh_powerup_shop() -> void:
+	for item in POWERUP_SHOP:
+		var kind := str(item["kind"])
+		var row: Dictionary = powerup_rows[kind]
+		(row["owned"] as Label).text = "OWNED: %d" % int(powerup_inventory.get(kind, 0))
+		(row["buy"] as Button).disabled = wallet_coins < int(item["price"])
+	shop_wallet_label.text = "COIN BANK: %d" % wallet_coins
+
+
+func buy_powerup(kind: String) -> void:
+	for item in POWERUP_SHOP:
+		if item["kind"] != kind:
+			continue
+		var price := int(item["price"])
+		if wallet_coins < price:
+			return
+		wallet_coins -= price
+		powerup_inventory[kind] = int(powerup_inventory.get(kind, 0)) + 1
+		play_sfx(collect_sound_player)
+		save_profile()
+		update_coin_counter()
+		refresh_powerup_shop()
+		return
+
+
+func refresh_powerup_bar() -> void:
+	var any := false
+	for use_button in powerup_bar.get_children():
+		var kind := str(use_button.name).trim_prefix("Use_")
+		var count := int(powerup_inventory.get(kind, 0))
+		(use_button as Button).text = "\n\n\nx%d" % count
+		use_button.visible = count > 0
+		any = any or count > 0
+	powerup_bar.visible = any and game_started and not game_over
+
+
+func use_powerup(kind: String) -> void:
+	if not game_started or game_over or get_tree().paused or is_instance_valid(player_stuck_web):
+		return
+	var count := int(powerup_inventory.get(kind, 0))
+	if count <= 0:
+		return
+	powerup_inventory[kind] = count - 1
+	apply_power_up(kind)
+	save_profile()
+	refresh_powerup_bar()
+
+
+func update_coin_timer(delta: float) -> void:
+	if game_over or coin_time_up:
+		return
+	coin_time_left = maxf(0.0, coin_time_left - delta)
+	var seconds := ceili(coin_time_left)
+	coin_timer_label.text = "%d:%02d" % [seconds / 60, seconds % 60]
+	var urgent := coin_time_left <= 10.0
+	coin_timer_label.add_theme_color_override("font_color", Color("e0263a") if urgent else CuteStyle.INK)
+	coin_timer_label.scale = Vector2.ONE * (1.12 if urgent and sin(world_elapsed * 12.0) > 0.0 else 1.0)
+	coin_timer_label.pivot_offset = coin_timer_label.size / 2.0
+	if coin_time_left <= 0.0:
+		coin_time_up = true
+		coin_winner = coin_race_winner()
+		show_power_message("TIME'S UP! %s!" % ("YOU WIN" if coin_winner.is_empty() else coin_winner + " WINS"))
+		end_game()
+
+
+func coin_race_winner() -> String:
+	# Empty string means the player has the most coins (ties go to the player).
+	var best_name := ""
+	var best_coins := coins_collected
+	for bot_node in bot_swings.get_children():
+		if int(bot_node.get_meta("coins", 0)) > best_coins:
+			best_coins = int(bot_node.get_meta("coins", 0))
+			best_name = str(bot_node.get_meta("name", "A JELLY"))
+	return best_name
+
+
+func update_orb_lifetimes(delta: float) -> void:
+	# Coin Run orbs fade away after a while and a new one appears elsewhere.
+	var expired: Array[Sprite2D] = []
+	for anchor_node in swing_anchors.get_children():
+		var anchor := anchor_node as Sprite2D
+		if not anchor or not anchor.has_meta("life"):
+			continue
+		var life := float(anchor.get_meta("life")) - delta
+		anchor.set_meta("life", life)
+		var age := float(anchor.get_meta("age", 99.0)) + delta
+		anchor.set_meta("age", age)
+		var alpha := clampf(life / ORB_FADE_SECONDS, 0.0, 1.0) * clampf(age / 0.6, 0.0, 1.0)
+		anchor.modulate.a = alpha
+		if life <= 0.0:
+			expired.append(anchor)
+	for anchor in expired:
+		expire_orb(anchor)
+
+
+func expire_orb(anchor: Sprite2D) -> void:
+	var spot := anchor.global_position
+	if swing_anchor == anchor:
+		is_swinging = false
+		swing_anchor = null
+		swing_rope.hide()
+	for bot_node in bot_swings.get_children():
+		if not bool(bot_node.get_meta("rope_cut")) and Vector2(bot_node.get_meta("from_anchor")).distance_squared_to(spot) < 4.0:
+			bot_node.set_meta("rope_cut", true)
+	swing_anchors.remove_child(anchor)
+	anchor.queue_free()
+	var player := get_player_center()
+	var new_spot := Vector2.ZERO
+	for attempt in range(10):
+		new_spot = Vector2(randf_range(110.0, map_width - 110.0), randf_range(260.0, floor_y - 320.0))
+		if new_spot.distance_to(player) > 260.0:
+			break
+	spawn_anchor(new_spot)
+	var fresh := swing_anchors.get_child(swing_anchors.get_child_count() - 1) as Sprite2D
+	if fresh:
+		fresh.set_meta("age", 0.0)
+		fresh.modulate.a = 0.0
+
+
 func open_tutorial() -> void:
 	tutorial.open()
 
@@ -1037,6 +1312,15 @@ func _on_tutorial_closed() -> void:
 
 
 const VERSION_LOG: Array[Dictionary] = [
+	{"version": "1.0.5", "notes": [
+		"Power-up shop: buy rockets, warps, magnets and knives in the Jelly Vault, then tap them during a run.",
+		"New shop-only WILD ROCKET flings you in a random direction!",
+		"Coin Run is now a 90-second round with way more coins. Whoever has the most coins when time runs out wins!",
+		"Coins drift toward you when you get close.",
+		"Purple orbs in Coin Run fade away and pop up somewhere else.",
+		"Sky Climb scenery: the Great Pyramids, the Eiffel Tower and the Taj Mahal, plus balloons, planes and kites.",
+		"Fixed the ? button position on iPad.",
+	]},
 	{"version": "1.0.4", "notes": [
 		"New How to Play guide. Tap the ? button on the home screen any time.",
 		"The guide opens by itself the first time you play.",
@@ -1153,7 +1437,7 @@ func apply_wide_layout() -> void:
 	if extra_width <= 1.0:
 		return
 	var half := extra_width * 0.5
-	var full_rect_names := ["JellySky", "ReadabilityVeil", "CuteGradient", "CuteBackground", "SettingsButton"]
+	var full_rect_names := ["JellySky", "ReadabilityVeil", "CuteGradient", "CuteBackground", "SettingsButton", "HelpButton"]
 	for screen in [start_screen, shop_screen, game_over_screen]:
 		for child in screen.get_children():
 			if child is Control and not full_rect_names.has(str(child.name)):
@@ -1161,6 +1445,8 @@ func apply_wide_layout() -> void:
 	for right_control in [leaderboard_panel, tag_status_label]:
 		(right_control as Control).position.x += extra_width
 	power_message.position.x += half
+	if coin_timer_label:
+		coin_timer_label.position.x += half
 	# Keep the menu art's logo visible: fill the width and crop from the bottom.
 	var menu_art := start_screen.get_node_or_null("JellySky") as TextureRect
 	if menu_art and menu_art.texture:
@@ -1271,6 +1557,11 @@ func apply_safe_area() -> void:
 			if shop_child is Control and shop_child.name != "CuteGradient":
 				(shop_child as Control).position.y += safe_area_top
 		settings_button.position.y += safe_area_top
+		help_button.position.y += safe_area_top
+		coin_timer_label.position.y += safe_area_top
+	if powerup_bar:
+		powerup_bar.offset_top -= safe_area_bottom
+		powerup_bar.offset_bottom -= safe_area_bottom
 	if banner_ad:
 		banner_ad.set_bottom_inset(safe_area_bottom)
 	fit_menus_above_banner()
@@ -1666,6 +1957,11 @@ func _physics_process(delta: float) -> void:
 
 	update_bats(delta)
 	update_spider_webs(delta)
+	if active_game_mode == "COIN":
+		update_orb_lifetimes(delta)
+		update_coin_timer(delta)
+		if game_over:
+			return
 
 	update_swing_rope()
 
@@ -1757,7 +2053,8 @@ func populate_world() -> void:
 
 
 
-	for coin_index in range(coin_count):
+	var coin_mode_bonus := 1.6 if active_game_mode == "COIN" else 1.0
+	for coin_index in range(int(coin_count * coin_mode_bonus)):
 
 		coin_positions.append(Vector2(
 
@@ -1767,7 +2064,7 @@ func populate_world() -> void:
 
 		))
 
-	for big_coin_index in range(big_coin_count):
+	for big_coin_index in range(int(big_coin_count * coin_mode_bonus)):
 
 		big_coin_positions.append(Vector2(
 
@@ -1917,6 +2214,151 @@ func configure_climb_level() -> void:
 	# (falling off the bottom still ends the run), so nothing breaks the sky.
 	floor_rect.color = LAVA_JAM_COLOR if climb_level == 1 else Color(sky_bottom_color, 0.0)
 	level_label.text = "LEVEL %d" % climb_level
+	build_climb_scenery()
+
+
+func build_climb_scenery() -> void:
+	# Levels 1-3 each get a famous landmark along the ground plus balloons and
+	# planes drifting at every height. Seeded per level so it never jumps around.
+	climb_scenery.clear()
+	if climb_level > 3:
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7919 * climb_level
+	var landmark: String = ["pyramids", "eiffel", "taj"][climb_level - 1]
+	var center_x := map_width * 0.5
+	for offset in [-420.0, 2600.0, -3300.0, 5200.0, -5400.0]:
+		climb_scenery.append({"kind": landmark, "pos": Vector2(center_x + offset, floor_y + 20.0)})
+	for prop_index in range(70):
+		var kind: String = ["balloon", "balloon", "plane", "kite"][rng.randi() % 4]
+		climb_scenery.append({
+			"kind": kind,
+			"pos": Vector2(rng.randf_range(200.0, map_width - 200.0), rng.randf_range(600.0, floor_y - 1400.0)),
+			"hue": rng.randf(),
+		})
+
+
+func draw_climb_scenery(visible_bounds: Rect2) -> void:
+	if active_game_mode != "CLIMB" or climb_scenery.is_empty():
+		return
+	var tint := sky_bottom_color.lerp(Color(0.25, 0.3, 0.55), 0.35)
+	var silhouette := Color(tint, 0.55)
+	var shade := Color(tint.darkened(0.15), 0.6)
+	for item in climb_scenery:
+		var at: Vector2 = item["pos"]
+		var reach := Rect2(at - Vector2(700.0, 1300.0), Vector2(1400.0, 1400.0))
+		if not reach.intersects(visible_bounds):
+			continue
+		match str(item["kind"]):
+			"pyramids":
+				_draw_pyramid(at + Vector2(-260.0, 0.0), 300.0, silhouette, shade)
+				_draw_pyramid(at + Vector2(240.0, 0.0), 420.0, silhouette, shade)
+				_draw_pyramid(at + Vector2(560.0, 0.0), 220.0, silhouette, shade)
+			"eiffel":
+				_draw_eiffel(at, silhouette)
+			"taj":
+				_draw_taj(at, silhouette, shade)
+			"balloon":
+				_draw_balloon(at, float(item["hue"]))
+			"plane":
+				_draw_plane(at)
+			"kite":
+				_draw_kite(at, float(item["hue"]))
+
+
+func _draw_pyramid(base: Vector2, height: float, face: Color, side: Color) -> void:
+	var half := height * 0.95
+	draw_colored_polygon(PackedVector2Array([base + Vector2(-half, 0.0), base + Vector2(0.0, -height), base + Vector2(half * 0.35, 0.0)]), face)
+	draw_colored_polygon(PackedVector2Array([base + Vector2(half * 0.35, 0.0), base + Vector2(0.0, -height), base + Vector2(half, 0.0)]), side)
+
+
+func _draw_eiffel(base: Vector2, color: Color) -> void:
+	var h := 1150.0
+	# Legs with an arch between them.
+	draw_colored_polygon(PackedVector2Array([
+		base + Vector2(-300.0, 0.0), base + Vector2(-210.0, 0.0), base + Vector2(-120.0, -150.0),
+		base + Vector2(120.0, -150.0), base + Vector2(210.0, 0.0), base + Vector2(300.0, 0.0),
+		base + Vector2(150.0, -380.0), base + Vector2(-150.0, -380.0),
+	]), color)
+	draw_rect(Rect2(base + Vector2(-190.0, -400.0), Vector2(380.0, 30.0)), color)
+	# Middle section narrowing up to the second platform.
+	draw_colored_polygon(PackedVector2Array([
+		base + Vector2(-150.0, -390.0), base + Vector2(150.0, -390.0),
+		base + Vector2(75.0, -700.0), base + Vector2(-75.0, -700.0),
+	]), color)
+	draw_rect(Rect2(base + Vector2(-100.0, -715.0), Vector2(200.0, 24.0)), color)
+	# Upper spire.
+	draw_colored_polygon(PackedVector2Array([
+		base + Vector2(-70.0, -700.0), base + Vector2(70.0, -700.0),
+		base + Vector2(14.0, -h + 60.0), base + Vector2(-14.0, -h + 60.0),
+	]), color)
+	draw_rect(Rect2(base + Vector2(-5.0, -h), Vector2(10.0, 70.0)), color)
+	# Lattice hint.
+	var lattice := Color(1.0, 1.0, 1.0, 0.12)
+	for i in range(1, 6):
+		var y := -390.0 - 62.0 * float(i)
+		var w := lerpf(150.0, 75.0, float(i) / 5.0)
+		draw_line(base + Vector2(-w, y), base + Vector2(w, y - 62.0), lattice, 3.0)
+		draw_line(base + Vector2(w, y), base + Vector2(-w, y - 62.0), lattice, 3.0)
+
+
+func _draw_taj(base: Vector2, color: Color, side: Color) -> void:
+	# Plinth, main hall with an arched doorway, onion dome, four minarets.
+	draw_rect(Rect2(base + Vector2(-520.0, -60.0), Vector2(1040.0, 60.0)), side)
+	draw_rect(Rect2(base + Vector2(-260.0, -360.0), Vector2(520.0, 300.0)), color)
+	draw_rect(Rect2(base + Vector2(-70.0, -300.0), Vector2(140.0, 240.0)), Color(1.0, 1.0, 1.0, 0.12))
+	draw_circle(base + Vector2(0.0, -300.0) + Vector2(0.0, 0.0), 70.0, Color(1.0, 1.0, 1.0, 0.12))
+	draw_rect(Rect2(base + Vector2(-110.0, -420.0), Vector2(220.0, 70.0)), color)
+	draw_circle(base + Vector2(0.0, -520.0), 150.0, color)
+	draw_colored_polygon(PackedVector2Array([base + Vector2(-60.0, -640.0), base + Vector2(0.0, -760.0), base + Vector2(60.0, -640.0)]), color)
+	draw_rect(Rect2(base + Vector2(-4.0, -800.0), Vector2(8.0, 50.0)), color)
+	for side_x in [-1.0, 1.0]:
+		draw_circle(base + Vector2(side_x * 200.0, -400.0), 55.0, color)
+		for minaret_x in [380.0, 470.0]:
+			var mx: float = side_x * minaret_x
+			draw_rect(Rect2(base + Vector2(mx - 18.0, -560.0), Vector2(36.0, 500.0)), color)
+			draw_circle(base + Vector2(mx, -565.0), 28.0, color)
+			draw_rect(Rect2(base + Vector2(mx - 26.0, -420.0), Vector2(52.0, 12.0)), side)
+
+
+func _draw_balloon(at: Vector2, hue: float) -> void:
+	var bob := sin(world_elapsed * 0.8 + at.x * 0.01) * 10.0
+	var top := at + Vector2(0.0, bob)
+	var fabric := Color.from_hsv(hue, 0.35, 1.0, 0.75)
+	draw_circle(top, 70.0, fabric)
+	draw_colored_polygon(PackedVector2Array([top + Vector2(-62.0, 30.0), top + Vector2(62.0, 30.0), top + Vector2(18.0, 105.0), top + Vector2(-18.0, 105.0)]), fabric)
+	draw_line(top + Vector2(-24.0, 0.0), top + Vector2(-24.0, 60.0), Color(1, 1, 1, 0.35), 8.0)
+	draw_line(top + Vector2(24.0, 0.0), top + Vector2(24.0, 60.0), Color(1, 1, 1, 0.35), 8.0)
+	draw_line(top + Vector2(-16.0, 105.0), top + Vector2(-14.0, 130.0), Color(0.4, 0.3, 0.3, 0.6), 2.0)
+	draw_line(top + Vector2(16.0, 105.0), top + Vector2(14.0, 130.0), Color(0.4, 0.3, 0.3, 0.6), 2.0)
+	draw_rect(Rect2(top + Vector2(-18.0, 130.0), Vector2(36.0, 26.0)), Color("b07a4f", 0.8))
+
+
+func _draw_plane(at: Vector2) -> void:
+	var drift := fmod(world_elapsed * 60.0 + at.y, 1600.0) - 800.0
+	var p := at + Vector2(drift, 0.0)
+	var body := Color(1.0, 1.0, 1.0, 0.8)
+	draw_colored_polygon(PackedVector2Array([p + Vector2(-90.0, -10.0), p + Vector2(70.0, -12.0), p + Vector2(100.0, 0.0), p + Vector2(70.0, 12.0), p + Vector2(-90.0, 10.0)]), body)
+	draw_colored_polygon(PackedVector2Array([p + Vector2(-10.0, 0.0), p + Vector2(25.0, 0.0), p + Vector2(-20.0, 55.0), p + Vector2(-40.0, 55.0)]), body)
+	draw_colored_polygon(PackedVector2Array([p + Vector2(-80.0, -8.0), p + Vector2(-60.0, -8.0), p + Vector2(-90.0, -45.0), p + Vector2(-100.0, -45.0)]), body)
+	for w in range(4):
+		draw_circle(p + Vector2(50.0 - float(w) * 22.0, -3.0), 4.0, Color("8ec5ff", 0.9))
+
+
+func _draw_kite(at: Vector2, hue: float) -> void:
+	var sway := sin(world_elapsed * 1.6 + at.x) * 0.15
+	var color := Color.from_hsv(hue, 0.5, 1.0, 0.75)
+	var points := PackedVector2Array([Vector2(0.0, -60.0), Vector2(40.0, 0.0), Vector2(0.0, 70.0), Vector2(-40.0, 0.0)])
+	for i in range(points.size()):
+		points[i] = at + points[i].rotated(sway)
+	draw_colored_polygon(points, color)
+	draw_line(points[0], points[2], Color(1, 1, 1, 0.5), 2.0)
+	draw_line(points[1], points[3], Color(1, 1, 1, 0.5), 2.0)
+	var tail := points[2]
+	for i in range(5):
+		var next := tail + Vector2(sin(world_elapsed * 3.0 + float(i)) * 12.0, 28.0)
+		draw_line(tail, next, Color(color, 0.6), 2.0)
+		tail = next
 
 
 func configure_standard_world() -> void:
@@ -1970,6 +2412,8 @@ func spawn_anchor(anchor_position: Vector2) -> void:
 
 	anchor.scale = Vector2.ONE * orb_scale
 	anchor.set_meta("pulse_offset", randf_range(0.0, TAU))
+	if active_game_mode == "COIN":
+		anchor.set_meta("life", randf_range(ORB_LIFE_MIN, ORB_LIFE_MAX))
 
 	swing_anchors.add_child(anchor)
 
@@ -2238,6 +2682,13 @@ func apply_power_up(kind: String) -> void:
 		velocity = Vector2(randf_range(-170.0, 170.0), randf_range(-180.0, 20.0))
 
 		show_power_message("WARP!")
+
+	elif kind == "wild":
+
+		# Like a rocket, but in any direction at all.
+		var fling := Vector2.from_angle(randf() * TAU)
+		velocity = fling * 1550.0
+		show_power_message("WILD ROCKET!")
 
 	elif kind == "magnet":
 
@@ -3575,6 +4026,7 @@ func end_game() -> void:
 	if game_over:
 		return
 	game_over = true
+	powerup_bar.hide()
 
 	velocity = Vector2.ZERO
 
@@ -3597,7 +4049,7 @@ func end_game() -> void:
 		straighten_tween.kill()
 
 	# A won Tag round goes straight to results; every other end gets a lucky spin.
-	if active_game_mode == "TAG" and tag_round_won:
+	if (active_game_mode == "TAG" and tag_round_won) or (active_game_mode == "COIN" and coin_time_up and coin_winner.is_empty()):
 		finalize_game_over()
 	else:
 		# The game-over sting plays at the moment of death, then again on the
@@ -3610,7 +4062,7 @@ func end_game() -> void:
 
 
 func show_death_wheel() -> void:
-	var wheel := PrizeWheel.new(active_game_mode != "TAG")
+	var wheel := PrizeWheel.new(active_game_mode != "TAG" and not coin_time_up)
 	wheel.finished.connect(_on_death_wheel_finished)
 	wheel.spin_started.connect(func() -> void: play_sfx(wheel_spin_sound_player))
 	wheel.landed.connect(func(_revive: bool) -> void: play_sfx(success_sound_player))
@@ -3638,13 +4090,16 @@ func finalize_game_over() -> void:
 	if game_over_finalized:
 		return
 	game_over_finalized = true
-	var won_tag := active_game_mode == "TAG" and tag_round_won
+	var won_tag := (active_game_mode == "TAG" and tag_round_won) or (active_game_mode == "COIN" and coin_time_up and coin_winner.is_empty())
 	var game_over_title := game_over_screen.get_node("GameOver") as Label
 	if won_tag:
 		# Last jelly standing: celebrate instead of the game-over sting.
 		game_over_title.text = "YOU WIN!"
 		wallet_coins += TAG_WIN_BONUS
 		play_sfx(success_sound_player)
+	elif active_game_mode == "COIN" and coin_time_up:
+		game_over_title.text = "%s WINS!" % coin_winner
+		play_sfx(game_over_sound_player)
 	else:
 		game_over_title.text = "OOPS!"
 		play_sfx(game_over_sound_player)
@@ -3754,6 +4209,7 @@ func revive_player() -> void:
 	game_over = false
 	game_over_finalized = false
 	show_power_message("REVIVED!")
+	refresh_powerup_bar()
 	play_sfx(revive_sound_player)
 	if not background_music_player.playing:
 		background_music_player.play()
@@ -3803,6 +4259,7 @@ func start_game() -> void:
 	tag_status_label.visible = active_game_mode == "TAG"
 	tag_badges.visible = active_game_mode == "TAG"
 	it_banner.hide()
+	coin_timer_label.visible = active_game_mode == "COIN"
 
 	# The coin leaderboard only applies to the score-chasing mode.
 	leaderboard_panel.visible = active_game_mode == "COIN"
@@ -3880,6 +4337,10 @@ func restart_game() -> void:
 	tag_transfer_cooldown_until = 0.0
 	tag_ai_timer = 0.0
 	tag_round_won = false
+	coin_time_left = COIN_RUN_SECONDS
+	coin_time_up = false
+	coin_winner = ""
+	call_deferred("refresh_powerup_bar")
 
 	bounce_pad_next_trigger_time = 0.0
 
@@ -3930,6 +4391,8 @@ func return_to_main_menu() -> void:
 
 	tag_badges.visible = false
 	it_banner.hide()
+	coin_timer_label.hide()
+	powerup_bar.hide()
 
 	game_started = false
 
@@ -4021,6 +4484,11 @@ func collect_coins(delta: float) -> void:
 
 			adjusted_position = adjusted_position.move_toward(jelly_center, 900.0 * delta)
 
+		elif jelly_center.distance_to(adjusted_position) < COIN_SUCTION_RADIUS:
+
+			# A gentle pull so near-misses still count.
+			adjusted_position = adjusted_position.move_toward(jelly_center, COIN_SUCTION_SPEED * delta)
+
 		if has_player_contact(adjusted_position, 34.0):
 
 			coins_collected += 1
@@ -4046,6 +4514,10 @@ func collect_coins(delta: float) -> void:
 		if magnet_time > 0.0 and jelly_center.distance_to(adjusted_big_coin) < 720.0:
 
 			adjusted_big_coin = adjusted_big_coin.move_toward(jelly_center, 780.0 * delta)
+
+		elif jelly_center.distance_to(adjusted_big_coin) < COIN_SUCTION_RADIUS + 25.0:
+
+			adjusted_big_coin = adjusted_big_coin.move_toward(jelly_center, COIN_SUCTION_SPEED * delta)
 
 		if has_player_contact(adjusted_big_coin, 52.0):
 
@@ -4197,6 +4669,11 @@ func write_save() -> void:
 	save_file.set_value("profile", "pending_chest_skin", chest_pending_skin)
 	save_file.set_value("profile", "player_name", player_name)
 	save_file.set_value("profile", "tutorial_seen", tutorial_seen)
+	var inventory_parts: Array[String] = []
+	for kind in powerup_inventory.keys():
+		if int(powerup_inventory[kind]) > 0:
+			inventory_parts.append("%s:%d" % [kind, int(powerup_inventory[kind])])
+	save_file.set_value("profile", "powerups", ",".join(inventory_parts))
 	var saved_skin_ids: Array[String] = []
 	for skin_id in unlocked_skins:
 		saved_skin_ids.append(str(skin_id))
@@ -4247,6 +4724,11 @@ func load_profile() -> void:
 		# A chest reward left unclaimed when the app closed is granted on launch.
 		player_name = sanitize_player_name(str(profile_file.get_value("profile", "player_name", "")))
 		tutorial_seen = bool(profile_file.get_value("profile", "tutorial_seen", false))
+		powerup_inventory.clear()
+		for part in str(profile_file.get_value("profile", "powerups", "")).split(",", false):
+			var pieces := part.split(":")
+			if pieces.size() == 2 and _is_shop_powerup(pieces[0]) and pieces[1].is_valid_int():
+				powerup_inventory[pieces[0]] = clampi(int(pieces[1]), 0, 999)
 		var pending_from_save := int(profile_file.get_value("profile", "pending_chest_skin", -1))
 		if pending_from_save >= 0 and pending_from_save < skin_definitions.size() and not unlocked_skins.has(pending_from_save):
 			unlocked_skins.append(pending_from_save)
@@ -5001,6 +5483,14 @@ func set_shop_tab(tab_name: String) -> void:
 
 	var showing_coins := tab_name == "coins"
 
+	var showing_powerups := tab_name == "powerups"
+
+	if powerup_panel:
+		powerup_panel.visible = showing_powerups
+		powerups_tab_button.disabled = showing_powerups
+		if showing_powerups:
+			refresh_powerup_shop()
+
 	common_chest_button.show() if showing_chests else common_chest_button.hide()
 
 	chest_preview.hide()
@@ -5060,6 +5550,10 @@ func _input(event: InputEvent) -> void:
 	if pause_button and pause_button.visible and (event is InputEventMouseButton or event is InputEventScreenTouch) and event.pressed:
 		if pause_button.get_global_rect().grow(12.0).has_point(event.position):
 			return
+	if powerup_bar and powerup_bar.visible and (event is InputEventMouseButton or event is InputEventScreenTouch):
+		for powerup_button in powerup_bar.get_children():
+			if powerup_button.visible and (powerup_button as Control).get_global_rect().grow(8.0).has_point(event.position):
+				return
 	# Mouse click on Windows
 
 	if event is InputEventMouseButton:
@@ -5382,6 +5876,7 @@ func _draw() -> void:
 
 
 	draw_sky_decorations(visible_bounds)
+	draw_climb_scenery(visible_bounds)
 	# A soft candy rim makes the ceiling and side walls easy to recognize.
 
 	var map_border := Rect2(0.0, 0.0, map_width, floor_y)

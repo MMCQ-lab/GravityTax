@@ -87,6 +87,9 @@ func _run() -> void:
 	await test_bats_chase_bots()
 	await test_tag_badges()
 	await test_tutorial()
+	await test_powerup_shop()
+	await test_coin_run_round()
+	await test_climb_scenery()
 	clear_save_files()
 	print("\n%d passed, %d failed" % [passes, failures])
 	quit(1 if failures > 0 else 0)
@@ -603,3 +606,83 @@ func test_tutorial() -> void:
 	check("finishing closes it and remembers", not game.tutorial.visible and game.tutorial_seen)
 	await spawn_game()
 	check("seen flag survives a restart", game.tutorial_seen)
+
+
+func test_powerup_shop() -> void:
+	game.wallet_coins = 200
+	game.open_shop()
+	game.set_shop_tab("powerups")
+	check("power-up tab shows the shop", game.powerup_panel.visible)
+	game.buy_powerup("wild")
+	game.buy_powerup("rocket")
+	check("buying spends coins", game.wallet_coins == 200 - 75 - 40 and int(game.powerup_inventory.get("wild", 0)) == 1)
+	game.wallet_coins = 10
+	game.refresh_powerup_shop()
+	game.buy_powerup("knife")
+	check("can't buy without enough coins", int(game.powerup_inventory.get("knife", 0)) == 0 and game.wallet_coins == 10)
+	game.close_shop()
+	await spawn_game()
+	check("bought power-ups are saved", int(game.powerup_inventory.get("wild", 0)) == 1 and int(game.powerup_inventory.get("rocket", 0)) == 1)
+	game.select_game_mode("CLIMB")
+	game.revive_shield_time = 999.0
+	await physics_frame
+	await physics_frame
+	var wild_button := game.powerup_bar.get_node("Use_wild") as Button
+	check("owned power-ups appear in the run bar", game.powerup_bar.visible and wild_button.visible and not (game.powerup_bar.get_node("Use_knife") as Button).visible)
+	game.velocity = Vector2.ZERO
+	wild_button.pressed.emit()
+	check("wild rocket flings Jelly hard", game.velocity.length() > 1400.0 and int(game.powerup_inventory.get("wild", 0)) == 0)
+	await physics_frame
+	check("used-up power-up leaves the bar", not wild_button.visible)
+	game.return_to_main_menu()
+	check("bar hides on the menu", not game.powerup_bar.visible)
+
+
+func test_coin_run_round() -> void:
+	game.select_game_mode("COIN")
+	game.revive_shield_time = 999.0
+	check("Coin Run has more coins", game.coin_positions.size() > game.coin_count)
+	check("Coin Run timer shows", game.coin_timer_label.visible and is_equal_approx(game.coin_time_left, game.COIN_RUN_SECONDS))
+	# Coin suction pulls a nearby coin in.
+	var center: Vector2 = game.get_player_center()
+	game.coin_positions.clear()
+	game.coin_positions.append(center + Vector2(110.0, 0.0))
+	var before: float = game.coin_positions[0].distance_to(center)
+	game.collect_coins(0.1)
+	check("nearby coins drift toward Jelly", game.coin_positions.is_empty() or game.coin_positions[0].distance_to(center) < before)
+	# Orbs fade out and a new one appears.
+	var orb_count: int = game.swing_anchors.get_child_count()
+	var first := game.swing_anchors.get_child(0) as Sprite2D
+	first.set_meta("life", 0.01)
+	await physics_frame
+	await physics_frame
+	check("orbs fade away and respawn", not is_instance_valid(first) or first.is_queued_for_deletion())
+	check("orb count stays the same", game.swing_anchors.get_child_count() >= orb_count - 1)
+	# Running out of time ends the round with no revive.
+	game.coins_collected = 9999
+	game.coin_time_left = 0.05
+	for frame in range(10):
+		game.revive_shield_time = 999.0
+		await physics_frame
+		if game.game_over:
+			break
+	check("time up ends Coin Run", game.game_over and game.coin_time_up)
+	check("leading the race means you win", game.coin_winner.is_empty() and child_of(PrizeWheel) == null)
+	var title := game.game_over_screen.get_node("GameOver") as Label
+	check("time up declares a winner", title.text == "YOU WIN!" or title.text.ends_with(" WINS!"))
+	game.return_to_main_menu()
+
+
+func test_climb_scenery() -> void:
+	game.select_game_mode("CLIMB")
+	var kinds := {}
+	for item in game.climb_scenery:
+		kinds[item["kind"]] = true
+	check("level 1 has the pyramids", kinds.has("pyramids") and kinds.has("balloon"))
+	game.climb_level = 2
+	game.configure_climb_level()
+	check("level 2 has the Eiffel Tower", game.climb_scenery.any(func(i): return i["kind"] == "eiffel"))
+	game.climb_level = 3
+	game.configure_climb_level()
+	check("level 3 has the Taj Mahal", game.climb_scenery.any(func(i): return i["kind"] == "taj"))
+	game.return_to_main_menu()
