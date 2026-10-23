@@ -561,7 +561,7 @@ var jump_dots: JumpDots
 var climb_scenery: Array[Dictionary] = []
 const CLIMB_LANDMARKS: Array[String] = [
 	"pyramids", "eiffel", "taj", "pisa", "bigben", "liberty", "colosseum", "greatwall",
-	"goldengate", "opera", "fuji", "redeemer", "machu", "stbasil", "needle",
+	"bridge", "windmills", "fuji", "moai", "machu", "stbasil", "stonehenge",
 ]
 var help_button: Button
 var tutorial: Tutorial
@@ -1332,7 +1332,7 @@ func refresh_limited_chest() -> void:
 		limited["rewards"] = []
 		var upcoming := next_season_event()
 		limited["texture"] = SEASON_CHEST_TEXTURES.get(str(upcoming.get("id", "fall")), SEASON_CHEST_TEXTURES["fall"])
-		limited["description"] = "Seasonal jellies are back for %s" % next_season_text()
+		limited["description"] = "Off-season. Here's a preview of what's next: %s" % next_season_text()
 	else:
 		limited["available"] = true
 		limited["rewards"] = event["skins"]
@@ -1799,6 +1799,11 @@ func _on_tutorial_closed() -> void:
 
 
 const VERSION_LOG: Array[Dictionary] = [
+	{"version": "1.1.8", "notes": [
+		"The Seasonal chest shows a preview of the next season's jellies when it's closed.",
+		"New PRIVACY link in Settings, and an Ads & privacy note in Credits.",
+		"A few Sky Climb landmarks were swapped for Stonehenge, Easter Island heads and windmills.",
+	]},
 	{"version": "1.1.7", "notes": [
 		"16 brand-new seasonal jellies: Fall, Winter, Spring and Summer.",
 		"Clear All Data button in Settings (it asks twice and lists exactly what gets deleted).",
@@ -1812,7 +1817,7 @@ const VERSION_LOG: Array[Dictionary] = [
 		"Refreshed Jelly Vault menu.",
 	]},
 	{"version": "1.0.6", "notes": [
-		"15 world landmarks in Sky Climb, one per level: Pyramids, Eiffel Tower, Taj Mahal, Leaning Tower of Pisa, Big Ben, Statue of Liberty, Colosseum, Great Wall, Golden Gate Bridge, Sydney Opera House, Mount Fuji, Christ the Redeemer, Machu Picchu, St. Basil's Cathedral and the Space Needle.",
+		"15 famous places in Sky Climb, one per level, from the Pyramids and the Eiffel Tower to Stonehenge.",
 		"Climb past level 15 to reach outer space!",
 		"Sky Climb gives you 3 hops in the air. Grab an orb or a bounce pad to get them back. The dots under your jelly show how many you have left.",
 		"Lots more jelly names, and no two the same in a race.",
@@ -1872,6 +1877,9 @@ func build_credits_text() -> String:
 	var lines: Array[String] = [
 		"JELLY SWING ARCADE",
 		"Made by MMCQ-Lab.",
+		"",
+		"ADS & PRIVACY",
+		"This game shows ads from Google AdMob. Google may collect data from your device, such as an approximate location, device identifiers, ad interactions and crash data, to show and measure ads. Ads are limited to family-friendly, non-personalized ads. MMCQ-Lab does not collect any data. Full privacy policy: mmcq-lab.github.io/GravityTax/site/privacy.html",
 		"",
 		"MUSIC & SOUND EFFECTS",
 		"All music and sound effects are from Pixabay, used under the Pixabay Content License (pixabay.com/service/license-summary).",
@@ -2796,20 +2804,20 @@ func draw_climb_scenery(visible_bounds: Rect2) -> void:
 				_draw_colosseum(at, silhouette, shade)
 			"greatwall":
 				_draw_greatwall(at, silhouette, shade)
-			"goldengate":
-				_draw_goldengate(at, Color(Color("d8705a").lerp(tint, 0.35), 0.6))
-			"opera":
-				_draw_opera(at, silhouette, shade)
+			"bridge":
+				_draw_suspension_bridge(at, silhouette)
+			"windmills":
+				_draw_windmills(at, silhouette, shade)
 			"fuji":
 				_draw_fuji(at, silhouette, shade)
-			"redeemer":
-				_draw_redeemer(at, silhouette, shade)
+			"moai":
+				_draw_moai(at, silhouette, shade)
 			"machu":
 				_draw_machu(at, silhouette, shade)
 			"stbasil":
 				_draw_stbasil(at, silhouette, shade, float(item.get("hue", 0.0)))
-			"needle":
-				_draw_needle(at, silhouette)
+			"stonehenge":
+				_draw_stonehenge(at, silhouette, shade)
 			"planet":
 				_draw_planet(at, float(item["hue"]))
 			"moon":
@@ -3015,7 +3023,7 @@ func _draw_greatwall(base: Vector2, color: Color, side: Color) -> void:
 		draw_rect(Rect2(wall[i] + Vector2(-10.0, -34.0), Vector2(14.0, 14.0)), color)
 
 
-func _draw_goldengate(base: Vector2, color: Color) -> void:
+func _draw_suspension_bridge(base: Vector2, color: Color) -> void:
 	var deck_y := -260.0
 	for tower_x in [-300.0, 300.0]:
 		draw_rect(Rect2(base + Vector2(tower_x - 50.0, -860.0), Vector2(30.0, 860.0)), color)
@@ -3039,26 +3047,6 @@ func _draw_goldengate(base: Vector2, color: Color) -> void:
 		draw_line(main_cable[i], Vector2(main_cable[i].x, base.y + deck_y), color, 2.0)
 
 
-func _draw_opera(base: Vector2, color: Color, side: Color) -> void:
-	draw_rect(Rect2(base + Vector2(-620.0, -110.0), Vector2(1240.0, 110.0)), side)
-	# Pointed shell "sails" leaning the same way, largest in the middle.
-	var sails := [[-480.0, 260.0, 420.0], [-250.0, 300.0, 600.0], [20.0, 280.0, 520.0], [270.0, 230.0, 400.0], [470.0, 170.0, 280.0]]
-	for sail in sails:
-		var x: float = sail[0]
-		var w: float = sail[1]
-		var h: float = sail[2]
-		var tip := Vector2(x + w * 0.78, -110.0 - h)
-		var points := PackedVector2Array([base + Vector2(x, -110.0)])
-		for i in range(1, 12):
-			var t := float(i) / 12.0
-			var curve := Vector2(x, -110.0).lerp(tip, t) + Vector2(-sin(t * PI) * w * 0.18, -sin(t * PI) * h * 0.12)
-			points.append(base + curve)
-		points.append(base + tip)
-		points.append(base + Vector2(x + w, -110.0))
-		draw_colored_polygon(points, color)
-		draw_polyline(points, Color(1.0, 1.0, 1.0, 0.3), 3.0, true)
-
-
 func _draw_fuji(base: Vector2, color: Color, side: Color) -> void:
 	var mountain := _poly(base, [Vector2(-900.0, 0.0), Vector2(-180.0, -880.0), Vector2(-90.0, -910.0), Vector2(90.0, -910.0), Vector2(180.0, -880.0), Vector2(900.0, 0.0)])
 	draw_colored_polygon(mountain, color)
@@ -3071,14 +3059,6 @@ func _draw_fuji(base: Vector2, color: Color, side: Color) -> void:
 		draw_rect(Rect2(base + Vector2(px - w * 0.35, y - 50.0), Vector2(w * 0.7, 50.0)), side)
 		draw_colored_polygon(_poly(base, [Vector2(px - w * 0.62, y - 40.0), Vector2(px + w * 0.62, y - 40.0), Vector2(px + w * 0.35, y - 70.0), Vector2(px - w * 0.35, y - 70.0)]), side)
 	draw_rect(Rect2(base + Vector2(px - 4.0, -480.0), Vector2(8.0, 90.0)), side)
-
-
-func _draw_redeemer(base: Vector2, color: Color, side: Color) -> void:
-	draw_colored_polygon(_poly(base, [Vector2(-800.0, 0.0), Vector2(-300.0, -420.0), Vector2(-90.0, -620.0), Vector2(90.0, -620.0), Vector2(260.0, -480.0), Vector2(800.0, 0.0)]), side)
-	draw_rect(Rect2(base + Vector2(-40.0, -680.0), Vector2(80.0, 60.0)), color)
-	draw_colored_polygon(_poly(base, [Vector2(-44.0, -680.0), Vector2(44.0, -680.0), Vector2(30.0, -940.0), Vector2(-30.0, -940.0)]), color)
-	draw_rect(Rect2(base + Vector2(-230.0, -930.0), Vector2(460.0, 44.0)), color)
-	draw_circle(base + Vector2(0.0, -975.0), 34.0, color)
 
 
 func _draw_machu(base: Vector2, color: Color, side: Color) -> void:
@@ -3114,14 +3094,61 @@ func _draw_stbasil(base: Vector2, color: Color, side: Color, _hue: float) -> voi
 		draw_rect(Rect2(base + Vector2(x - 3.0, -h - r * 2.3 - 40.0), Vector2(6.0, 40.0)), color)
 
 
-func _draw_needle(base: Vector2, color: Color) -> void:
-	draw_colored_polygon(_poly(base, [Vector2(-130.0, 0.0), Vector2(-80.0, 0.0), Vector2(-14.0, -820.0), Vector2(-40.0, -820.0)]), color)
-	draw_colored_polygon(_poly(base, [Vector2(80.0, 0.0), Vector2(130.0, 0.0), Vector2(40.0, -820.0), Vector2(14.0, -820.0)]), color)
-	draw_rect(Rect2(base + Vector2(-26.0, -820.0), Vector2(52.0, 820.0)), color)
-	draw_rect(Rect2(base + Vector2(-70.0, -300.0), Vector2(140.0, 18.0)), color)
-	draw_colored_polygon(_ellipse(base + Vector2(0.0, -860.0), 210.0, 46.0), color)
-	draw_colored_polygon(_ellipse(base + Vector2(0.0, -905.0), 130.0, 34.0), color)
-	draw_rect(Rect2(base + Vector2(-6.0, -1080.0), Vector2(12.0, 160.0)), color)
+func _draw_windmills(base: Vector2, color: Color, side: Color) -> void:
+	# Old-style Dutch windmills with slowly turning sails.
+	draw_rect(Rect2(base + Vector2(-700.0, -40.0), Vector2(1400.0, 40.0)), side)
+	for mill in [[-330.0, 1.0], [40.0, 0.8], [380.0, 0.65]]:
+		var x: float = mill[0]
+		var size: float = mill[1]
+		draw_colored_polygon(_poly(base, [Vector2(x - 110.0 * size, -40.0), Vector2(x + 110.0 * size, -40.0), Vector2(x + 70.0 * size, -520.0 * size), Vector2(x - 70.0 * size, -520.0 * size)]), color)
+		draw_colored_polygon(_poly(base, [Vector2(x - 90.0 * size, -520.0 * size), Vector2(x + 90.0 * size, -520.0 * size), Vector2(x, -620.0 * size)]), color)
+		draw_rect(Rect2(base + Vector2(x - 28.0 * size, -150.0 * size), Vector2(56.0 * size, 110.0 * size)), Color(1.0, 1.0, 1.0, 0.15))
+		var hub := base + Vector2(x, -540.0 * size)
+		var turn := world_elapsed * 0.4 * (1.0 + size * 0.2)
+		for blade in range(4):
+			var direction := Vector2.from_angle(turn + float(blade) * PI * 0.5)
+			var normal := direction.orthogonal()
+			draw_colored_polygon(PackedVector2Array([
+				hub + direction * 30.0 * size + normal * 8.0 * size,
+				hub + direction * 330.0 * size + normal * 8.0 * size,
+				hub + direction * 330.0 * size + normal * 60.0 * size,
+				hub + direction * 90.0 * size + normal * 60.0 * size,
+			]), Color(color, color.a * 0.85))
+			draw_line(hub, hub + direction * 330.0 * size, color, 8.0 * size)
+		draw_circle(hub, 20.0 * size, side)
+
+
+func _draw_moai(base: Vector2, color: Color, side: Color) -> void:
+	# Easter Island stone heads on a grassy slope.
+	draw_colored_polygon(_poly(base, [Vector2(-760.0, 0.0), Vector2(-500.0, -90.0), Vector2(500.0, -110.0), Vector2(760.0, 0.0)]), side)
+	for head in [[-360.0, 0.85], [-60.0, 1.0], [260.0, 0.92], [520.0, 0.7]]:
+		var x: float = head[0]
+		var s: float = head[1]
+		var foot := -100.0
+		draw_colored_polygon(_poly(base, [
+			Vector2(x - 90.0 * s, foot), Vector2(x + 90.0 * s, foot), Vector2(x + 95.0 * s, foot - 300.0 * s),
+			Vector2(x + 80.0 * s, foot - 560.0 * s), Vector2(x - 85.0 * s, foot - 560.0 * s), Vector2(x - 95.0 * s, foot - 300.0 * s),
+		]), color)
+		# Heavy brow, long nose and a thin mouth line.
+		draw_rect(Rect2(base + Vector2(x - 85.0 * s, foot - 470.0 * s), Vector2(170.0 * s, 26.0 * s)), side)
+		draw_colored_polygon(_poly(base, [Vector2(x - 12.0 * s, foot - 444.0 * s), Vector2(x + 12.0 * s, foot - 444.0 * s), Vector2(x + 34.0 * s, foot - 320.0 * s), Vector2(x - 34.0 * s, foot - 320.0 * s)]), side)
+		draw_rect(Rect2(base + Vector2(x - 50.0 * s, foot - 270.0 * s), Vector2(100.0 * s, 10.0 * s)), side)
+
+
+func _draw_stonehenge(base: Vector2, color: Color, side: Color) -> void:
+	# Ring of standing stones with lintels across the top.
+	draw_colored_polygon(_poly(base, [Vector2(-760.0, 0.0), Vector2(-600.0, -60.0), Vector2(600.0, -60.0), Vector2(760.0, 0.0)]), side)
+	var stones := [[-520.0, 300.0], [-400.0, 320.0], [-200.0, 380.0], [-80.0, 390.0], [120.0, 380.0], [240.0, 370.0], [420.0, 310.0], [540.0, 280.0]]
+	for stone in stones:
+		var x: float = stone[0]
+		var height: float = stone[1]
+		draw_rect(Rect2(base + Vector2(x - 40.0, -60.0 - height), Vector2(80.0, height)), color)
+	for pair in [[0, 1], [2, 3], [4, 5], [6, 7]]:
+		var left: Array = stones[pair[0]]
+		var right: Array = stones[pair[1]]
+		var top := -60.0 - minf(float(left[1]), float(right[1]))
+		draw_rect(Rect2(base + Vector2(float(left[0]) - 50.0, top - 50.0), Vector2(float(right[0]) - float(left[0]) + 100.0, 50.0)), color)
+	draw_colored_polygon(_poly(base, [Vector2(620.0, -60.0), Vector2(700.0, -60.0), Vector2(680.0, -220.0), Vector2(640.0, -230.0)]), color)
 
 
 func _draw_planet(at: Vector2, hue: float) -> void:
@@ -5811,6 +5838,17 @@ func select_chest(tier_name: String) -> void:
 		chest_carousel.show()
 
 		chest_result_label.text = "TAP OPEN TO SPIN"
+
+	elif tier_name == "LIMITED" and not next_season_event().is_empty():
+
+		# Off-season: preview the next season's jellies so nothing is hidden.
+		var upcoming_rewards: Array[int] = []
+		for reward_id in next_season_event()["skins"]:
+			upcoming_rewards.append(int(reward_id))
+		prepare_chest_carousel(upcoming_rewards)
+		chest_carousel_backdrop.show()
+		chest_carousel.show()
+		chest_result_label.text = "PREVIEW: %s JELLIES, BACK %s" % [str(next_season_event()["name"]), next_season_text().get_slice(": ", 1)]
 
 	else:
 

@@ -17,6 +17,7 @@ Nothing. Scores, coins, unlocked jellies and settings stay on the device (`user:
 | Usage Data | Product Interaction (app launches, taps, video views) | Third-Party Advertising, Analytics | No | See "Tracking" below |
 | Diagnostics | Crash Data | App Functionality, Analytics | No | No |
 | Diagnostics | Performance Data (launch time, hangs, energy) | Third-Party Advertising, Analytics | No | See "Tracking" below |
+| Diagnostics | Other Diagnostic Data | Third-Party Advertising, Analytics | No | No |
 
 Data Collected? **Yes** (because of the ad SDK).
 
@@ -42,6 +43,7 @@ Google's UMP consent flow already runs before any ad loads (`ads/ad_manager.gd`)
 
 ## Other App Store Connect fields
 
-- **Privacy Policy URL:** required. It must mention that ads are served by Google AdMob and link to https://policies.google.com/technologies/ads
-- **Age rating:** the questionnaire asks about ads. If you set the age rating below 13, or target children, AdMob must be set to child-directed treatment, which isn't configured.
+- **Privacy Policy URL:** https://mmcq-lab.github.io/GravityTax/site/privacy.html. It says plainly that Google AdMob may collect data and links to Google's policies. The game also links to it from Settings → PRIVACY, and Credits repeats the notice.
+- **Age rating:** 9+ (submitted). Ads are child-directed, under-age-of-consent and G-rated in `ads/ad_manager.gd`, which is right for a game kids may play. Don't choose "Made for Kids".
+- **EU:** EU countries are switched off in Pricing and Availability until the AdMob GDPR message and the Digital Services Act trader details are done.
 - **Export compliance:** already declared in the build (`ITSAppUsesNonExemptEncryption = false`).
