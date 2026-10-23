@@ -27,6 +27,8 @@ var _confirm_title: Label
 var _confirm_body: Label
 var _confirm_yes: Button
 var _confirm_step := 0
+const PRIVACY_URL := "https://mmcq-lab.github.io/GravityTax/site/privacy.html"
+var _privacy_button: Button
 const CLEAR_DATA_LIST := "This deletes:\n\n•  All high scores (Coin Run and Sky Climb)\n•  Every unlocked jelly (back to the starter jelly)\n•  All coins in your Coin Bank\n•  Unlocked effects and bought power-ups\n•  Your name\n\nSound settings are kept."
 var credits_text := ""
 var version_log_text := ""
@@ -129,7 +131,7 @@ func _ready() -> void:
 	_card.add_child(_clear_button)
 
 	_credits_button = Button.new()
-	_credits_button.text = "CREDITS & LICENSES"
+	_credits_button.text = "CREDITS"
 	_credits_button.flat = true
 	_credits_button.add_theme_font_size_override("font_size", 18)
 	_credits_button.add_theme_color_override("font_color", CuteStyle.INK_SOFT)
@@ -145,6 +147,16 @@ func _ready() -> void:
 	_whats_new_button.add_theme_color_override("font_hover_color", CuteStyle.INK)
 	_whats_new_button.pressed.connect(_show_version_log)
 	_card.add_child(_whats_new_button)
+
+	_privacy_button = Button.new()
+	_privacy_button.name = "PrivacyButton"
+	_privacy_button.text = "PRIVACY"
+	_privacy_button.flat = true
+	_privacy_button.add_theme_font_size_override("font_size", 18)
+	_privacy_button.add_theme_color_override("font_color", CuteStyle.ACCENT)
+	_privacy_button.add_theme_color_override("font_hover_color", CuteStyle.INK)
+	_privacy_button.pressed.connect(func() -> void: OS.shell_open(PRIVACY_URL))
+	_card.add_child(_privacy_button)
 
 	# Full-screen scrolling credits (engine licence and asset attributions).
 	_credits_layer = ColorRect.new()
@@ -277,10 +289,12 @@ func open(pause_mode: bool, music: float, sfx: float, muted: bool, player_name: 
 	_card.offset_right = 280.0
 	_card.offset_top = -card_height * 0.5
 	_card.offset_bottom = card_height * 0.5
-	_whats_new_button.position = Vector2(30.0, card_height - 66.0)
-	_whats_new_button.size = Vector2(200.0, 44.0)
-	_credits_button.position = Vector2(230.0, card_height - 66.0)
-	_credits_button.size = Vector2(300.0, 44.0)
+	_whats_new_button.position = Vector2(20.0, card_height - 66.0)
+	_whats_new_button.size = Vector2(180.0, 44.0)
+	_privacy_button.position = Vector2(200.0, card_height - 66.0)
+	_privacy_button.size = Vector2(160.0, 44.0)
+	_credits_button.position = Vector2(360.0, card_height - 66.0)
+	_credits_button.size = Vector2(180.0, 44.0)
 	_credits_layer.hide()
 	# Set values without echoing change events back to the game.
 	_music_slider.set_value_no_signal(music)

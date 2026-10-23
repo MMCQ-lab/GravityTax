@@ -745,6 +745,8 @@ func test_chests_and_effects() -> void:
 	game.refresh_limited_chest()
 	game.refresh_chest_selection_ui()
 	check("seasonal chest is greyed out off-season", not bool(game.chest_definitions["LIMITED"]["available"]) and (game.chest_pickers["LIMITED"] as TextureButton).modulate.r < 0.9)
+	game.select_chest("LIMITED")
+	check("off-season chest previews the next jellies", game.chest_carousel.visible and game.chest_result_label.text.begins_with("PREVIEW"))
 	game.season_override = "fall"
 	game.refresh_limited_chest()
 	# Open a Sparkle chest and claim the effect.

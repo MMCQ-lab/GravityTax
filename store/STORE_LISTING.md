@@ -6,7 +6,7 @@ Copy these into App Store Connect. Character limits are in brackets.
 **Subtitle** [30]: Swing, bounce & collect jellies
 
 **Promotional text** [170]:
-Swing through the sky as a squishy jelly! Grab orbs, bounce on marshmallow pads, scoop coins and collect 50 adorable jellies.
+Swing through the sky as a squishy jelly! Grab orbs, bounce on marshmallow pads, scoop coins and collect 60+ adorable jellies.
 
 **Description** [4000]:
 Swing, bounce and fling your way through a bright candy sky in Jelly Swing Arcade!
@@ -19,18 +19,19 @@ THREE WAYS TO PLAY
 • Jelly Tag: don't get stuck being IT! Be the last jelly standing to win.
 
 COLLECT THEM ALL
-• 50 cute jellies across five rarities: Common, Uncommon, Rare, Epic and Legendary.
+• 50 cute jellies across five rarities, plus limited-time seasonal jellies.
 • Open chests with the coins you earn, then claim your new jelly.
+• Sparkly glow and trail effects, and power-ups you can buy with coins.
 
 FUN EXTRAS
 • A lucky spin after every run: always win coins, and sometimes a revive!
 • Power-ups: rocket boost, warp, coin magnet and spinning knives.
 • Simple one-touch controls for players of all ages.
 
-Jelly Swing Arcade is free to play with optional ads. No account needed.
+Jelly Swing Arcade is free to play. It shows ads from Google AdMob (family-friendly and non-personalized); Google may collect some device data to show ads. See the privacy policy for details. No account needed, and no in-app purchases.
 
 **Keywords** [100]:
-jelly,swing,arcade,casual,cute,kids,tap,bounce,collect,climb,tag,coins,family,one touch,squishy
+jelly,swing,arcade,casual,cute,tap,bounce,collect,climb,tag,coins,family,one touch,squishy,fun
 
 **Category**: Games → Casual (secondary: Games → Arcade)
 **Price**: Free
@@ -48,7 +49,9 @@ jelly,swing,arcade,casual,cute,kids,tap,bounce,collect,climb,tag,coins,family,on
 
 - Sign-in required: **No**
 - Notes for the reviewer:
-  > No login is needed. Tap to jump, hold to swing from the purple orbs. Ads are served by Google AdMob with child-directed treatment and G-rated content only. Rewarded ads (coins, continue, chest reroll) are optional.
+  > No login is needed. Tap to jump, hold to swing from the purple orbs. There is no server, no remote configuration and no feature flags: every feature is in the binary and available offline from the first launch.
+  > Ads are served by Google AdMob with child-directed treatment and G-rated content only. This is a new AdMob account, so ads may not fill until the app is live; the game then shows "Ad not ready" and keeps working. Rewarded ads (coins, continue, chest reroll) are optional.
+  > The Seasonal chest unlocks limited-time jellies by date from the device clock (Fall Oct 1–Nov 30, Winter Dec 1–Jan 7, Spring Mar 10–Apr 30, Summer Jun 20–Aug 31). Outside those dates it is greyed out and shows a preview of the next season's jellies.
 
 ## Age rating (questionnaire)
 

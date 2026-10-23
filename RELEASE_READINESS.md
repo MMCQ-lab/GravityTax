@@ -227,3 +227,20 @@ Lower-risk designs left as they are: #46 Star Mushroom (astronaut helmet with a 
 | Excluded art absent from the package | **PASS**: no references to the excluded files inside `JellySwing.pck`. |
 | Package size | iOS `JellySwing.pck` **19.4 MB** (it was 48 MB). |
 | Signed IPA / archive | **BLOCKED** locally (needs macOS); covered by the CI workflow. |
+
+
+## Compliance review (October 22, 2026, version 1.1.7)
+
+| Area | Status | Notes |
+|---|---|---|
+| Privacy policy | **PASS** | `site/privacy.html` rewritten. A highlighted notice at the top says Google AdMob may collect data, then lists what (coarse location, identifiers, ad and interaction data, diagnostics), links Google's policies, and covers children, Clear All Data and contact. |
+| In-game disclosure | **PASS** | Settings → PRIVACY opens the policy. Credits starts with an "Ads & privacy" notice. |
+| App Store privacy answers | **PASS** | Match the policy: 7 data types, all "not linked", none used for tracking. `docs/APP_STORE_PRIVACY.md` updated. |
+| Kids & ads | **PASS** | Child-directed (COPPA), under-age-of-consent and G-rated ad requests; no ATT, no IDFA tracking. Rated 9+, not "Made for Kids". |
+| Data the game keeps | **PASS** | Everything stays on the device, including the optional player name. Clear All Data deletes it with a two-step confirm. |
+| Purchases / gambling | **PASS** | No in-app purchases. Chests, the lucky spin and power-ups use only coins earned in the game. |
+| Store listing | **PASS** | "kids" removed from keywords (Apple reserves kid wording for the Kids Category). Description mentions AdMob ads. |
+| Landmark artwork | **FIXED** | The Space Needle, Sydney Opera House and Christ the Redeemer actively license their likeness, so they were replaced with Dutch windmills, Easter Island heads and Stonehenge. The bridge is a plain silhouette and is never named. |
+| Third-party art & sound | **PASS** | Sounds: Pixabay (credited). Jelly and seasonal art: made by the developer with ChatGPT; the lookalike skins were made generic and the old versions deleted. |
+| EU (GDPR / DSA) | **AVOIDED** | EU storefronts are switched off until the AdMob GDPR message and DSA trader details are done. |
+| Contact for parents | **RECOMMENDED** | The only contact is GitHub Issues. A support email (not a personal one) is easier for parents and expected under COPPA. Add it to the privacy and support pages when you have one. |
