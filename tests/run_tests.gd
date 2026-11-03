@@ -93,6 +93,7 @@ func _run() -> void:
 	await test_hops_and_names()
 	await test_chests_and_effects()
 	await test_clear_all_data()
+	await test_sparkle_spin_and_bot_effects()
 	clear_save_files()
 	print("\n%d passed, %d failed" % [passes, failures])
 	quit(1 if failures > 0 else 0)
@@ -803,3 +804,32 @@ func test_clear_all_data() -> void:
 	game.settings_panel.open(true, 1.0, 1.0, false, "")
 	check("no Clear button on the pause menu", not (game.settings_panel.find_child("ClearDataButton", true, false) as Button).visible)
 	game.settings_panel.close()
+
+
+func test_sparkle_spin_and_bot_effects() -> void:
+	# Let the Sparkle chest spin for real (this used to crash mid-spin).
+	game.wallet_coins = 1000
+	var none: Array[String] = []
+	game.effects_owned = none
+	game.open_shop()
+	game.select_chest("SPARKLE")
+	game.open_selected_chest()
+	var spun := false
+	var waited := 0.0
+	while waited < 6.0:
+		await wait(0.1)
+		waited += 0.1
+		if not game.chest_rolling:
+			spun = true
+			break
+	check("Sparkle chest spins to the end without crashing", spun and game.is_effect_reward(game.chest_pending_skin))
+	game.claim_pending_chest()
+	game.close_shop()
+	var with_effects := 0
+	for attempt in range(4):
+		game.select_game_mode("COIN")
+		for bot in game.bot_swings.get_children():
+			if bot.get_node_or_null("BotEffect"):
+				with_effects += 1
+		game.return_to_main_menu()
+	check("some racer jellies show effects", with_effects > 0)
