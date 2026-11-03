@@ -1268,8 +1268,9 @@ func build_powerup_ui() -> void:
 	coin_timer_label = Label.new()
 	coin_timer_label.name = "CoinTimer"
 	coin_timer_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	coin_timer_label.position = Vector2(270.0, 104.0)
-	coin_timer_label.size = Vector2(180.0, 50.0)
+	# Left column under the Bats pill, clear of the pause button and leaderboard.
+	coin_timer_label.position = Vector2(20.0, 176.0)
+	coin_timer_label.size = Vector2(150.0, 50.0)
 	CuteStyle.pill_label(coin_timer_label, Color(CuteStyle.WHITE, 0.95), CuteStyle.INK)
 	coin_timer_label.add_theme_font_size_override("font_size", 28)
 	coin_timer_label.hide()
@@ -1963,8 +1964,6 @@ func apply_wide_layout() -> void:
 	for right_control in [leaderboard_panel, tag_status_label]:
 		(right_control as Control).position.x += extra_width
 	power_message.position.x += half
-	if coin_timer_label:
-		coin_timer_label.position.x += half
 	# Keep the menu art's logo visible: fill the width and crop from the bottom.
 	var menu_art := start_screen.get_node_or_null("JellySky") as TextureRect
 	if menu_art and menu_art.texture:
