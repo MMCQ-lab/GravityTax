@@ -388,6 +388,7 @@ var season_override := ""
 
 # Glow and trail effects from the Sparkle chest. Reward ids start at 1000.
 const EFFECT_ID_BASE := 1000
+const BOT_EFFECT_CHANCE := 0.35
 const EFFECTS: Array[Dictionary] = [
 	{"id": "glow", "name": "PINK GLOW", "style": "glow", "color": "ff7ad9"},
 	{"id": "gold", "name": "GOLDEN GLOW", "style": "glow", "color": "ffd23a"},
@@ -1799,6 +1800,10 @@ func _on_tutorial_closed() -> void:
 
 
 const VERSION_LOG: Array[Dictionary] = [
+	{"version": "1.1.9", "notes": [
+		"Fixed a crash when opening the Sparkle chest.",
+		"Some of the other jellies now show off glows and trails too.",
+	]},
 	{"version": "1.1.8", "notes": [
 		"The Seasonal chest shows a preview of the next season's jellies when it's closed.",
 		"New PRIVACY link in Settings, and an Ads & privacy note in Credits.",
@@ -2281,9 +2286,11 @@ func _process(delta: float) -> void:
 
 		var preview_skin: int = chest_reward_pool.pick_random()
 
-		chest_preview.texture = create_skin_texture(preview_skin)
+		# Rewards can be jellies or effects, so look them up through reward_*.
+		chest_preview.texture = reward_texture(preview_skin)
+		chest_preview.self_modulate = reward_tint(preview_skin)
 
-		chest_result_label.text = "OPENING...  %s" % str(skin_definitions[preview_skin]["name"])
+		chest_result_label.text = "OPENING...  %s" % reward_name(preview_skin)
 
 		chest_next_tick += lerp(0.07, 0.42, progress)
 
@@ -3300,6 +3307,14 @@ func spawn_swing_bot(anchor_position: Vector2, bot_number: int) -> void:
 	var bot_skin_id := randi_range(0, skin_definitions.size() - 1)
 
 	bot.set_meta("name", next_bot_name())
+	# About one racer in three shows off a random glow or trail.
+	if randf() < BOT_EFFECT_CHANCE:
+		var bot_effect := make_effect_node(str(EFFECTS.pick_random()["id"]))
+		if bot_effect:
+			bot_effect.name = "BotEffect"
+			if bot_effect is CPUParticles2D:
+				(bot_effect as CPUParticles2D).amount = maxi(10, int((bot_effect as CPUParticles2D).amount * 0.6))
+			bot.add_child(bot_effect)
 
 	bot.set_meta("magnet_until", 0.0)
 
