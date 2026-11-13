@@ -15,6 +15,13 @@ const TELEPORT_TEXTURE := preload("res://images/teleport_powerup.png")
 const MAGNET_TEXTURE := preload("res://images/magnet_powerup.png")
 
 const KNIFE_TEXTURE := preload("res://images/knife_powerup.png")
+const ROCK_TEXTURE := preload("res://images/rock_powerup.png")
+# Rock thrower: lobs rocks at the nearest bat, spider web or racer.
+const ROCK_DURATION := 10.0
+const ROCK_INTERVAL := 0.45
+const ROCK_SPEED := 1250.0
+const ROCK_RANGE := 760.0
+const ROCK_GRAVITY := 900.0
 
 const COMMON_CHEST_TEXTURE := preload("res://images/chests/chest_common.png")
 const UNCOMMON_CHEST_TEXTURE := preload("res://images/chests/chest_uncommon.png")
@@ -500,6 +507,13 @@ var magnet_count := 12
 
 var knife_count := 10
 
+var rock_count := 10
+var rock_time := 0.0
+var rock_cooldown := 0.0
+var rocks_layer: Node2D
+var coin_sparkles: Array[CPUParticles2D] = []
+var coin_sparkle_next := 0
+
 var world_elapsed := 0.0
 
 var game_over := false
@@ -535,6 +549,7 @@ const POWERUP_SHOP: Array[Dictionary] = [
 	{"kind": "teleport", "name": "WARP", "desc": "Jump somewhere new.", "price": 30},
 	{"kind": "magnet", "name": "MAGNET", "desc": "Pull in coins for 8 seconds.", "price": 50},
 	{"kind": "knife", "name": "KNIVES", "desc": "Spinning blades for 10 seconds.", "price": 60},
+	{"kind": "rocks", "name": "ROCK THROWER", "desc": "Throws rocks at bats and webs for 10s.", "price": 45},
 	{"kind": "wild", "name": "WILD ROCKET", "desc": "Random direction! Shop only.", "price": 75},
 ]
 const WILD_ROCKET_TINT := Color("d77bff")
@@ -770,6 +785,7 @@ func _ready() -> void:
 	power_message.hide()
 
 	setup_orbiting_knives()
+	setup_draw_order()
 	build_tag_badges()
 	jump_dots = JumpDots.new()
 	jump_dots.name = "JumpDots"
@@ -1098,8 +1114,8 @@ func build_tutorial_pages() -> Array[Dictionary]:
 			"text": "Jellies with a red IT badge are IT. If you're IT, touch another jelly within 30 seconds to pass it on, or you're out. Be the last jelly standing to win!"},
 		{"title": "WATCH OUT!", "extra": _tutorial_danger_art,
 			"text": "Bats chase you if you get close. From Sky Climb level 2, spider webs stick you in place, so TAP FAST to break free!"},
-		{"title": "POWER-UPS", "images": [ROCKET_TEXTURE, TELEPORT_TEXTURE, MAGNET_TEXTURE, KNIFE_TEXTURE],
-			"text": "Grab them in the sky, or buy them in the Jelly Vault and tap them during a run. Spinning knives beat bats and slice spider webs!"},
+		{"title": "POWER-UPS", "images": [ROCKET_TEXTURE, TELEPORT_TEXTURE, MAGNET_TEXTURE, KNIFE_TEXTURE, ROCK_TEXTURE],
+			"text": "Grab them in the sky, or buy them in the Jelly Vault and tap them during a run. Knives and the Rock Thrower beat bats and break spider webs!"},
 		{"title": "COLLECT JELLIES", "images": [COMMON_CHEST_TEXTURE, UNCOMMON_CHEST_TEXTURE, jelly],
 			"text": "Spend coins on chests in the Jelly Vault for new jellies, sparkly effects and limited-time seasonal jellies. After every run, spin the lucky wheel!"},
 	]
@@ -1156,6 +1172,7 @@ func powerup_icon(kind: String) -> Texture2D:
 		"rocket", "wild": return ROCKET_TEXTURE
 		"teleport": return TELEPORT_TEXTURE
 		"magnet": return MAGNET_TEXTURE
+		"rocks": return ROCK_TEXTURE
 	return KNIFE_TEXTURE
 
 
@@ -1785,6 +1802,153 @@ func expire_orb(anchor: Sprite2D) -> void:
 		fresh.modulate.a = 0.0
 
 
+func setup_draw_order() -> void:
+	# One clear back-to-front order so things never clip through each other:
+	# world art (sky, coins, pads, bot ropes) < webs < orbs/power-ups < player
+	# rope < racers < player < knives < rocks < bats < lava < hop dots/badges.
+	swing_anchors.z_index = 2
+	power_ups.z_index = 2
+	swing_rope.z_index = 3
+	bot_swings.z_index = 4
+	block.z_index = 5
+	blade_orbit.z_index = 6
+	bats.z_index = 8
+	floor_rect.z_index = 9
+	# Softer candy-coloured player rope with rounded ends.
+	swing_rope.width = 7.0
+	swing_rope.begin_cap_mode = Line2D.LINE_CAP_ROUND
+	swing_rope.end_cap_mode = Line2D.LINE_CAP_ROUND
+	var rope_gradient := Gradient.new()
+	rope_gradient.colors = PackedColorArray([Color("9b5cff"), Color("ff6fb5")])
+	swing_rope.gradient = rope_gradient
+	rocks_layer = Node2D.new()
+	rocks_layer.name = "Rocks"
+	rocks_layer.z_index = 7
+	add_child(rocks_layer)
+	# Small pool of sparkle bursts for coin pickups (re-used, never re-created).
+	for index in range(6):
+		var sparkle := CPUParticles2D.new()
+		sparkle.texture = EFFECT_TEXTURES["star"]
+		sparkle.one_shot = true
+		sparkle.emitting = false
+		sparkle.amount = 8
+		sparkle.lifetime = 0.45
+		sparkle.explosiveness = 1.0
+		sparkle.spread = 180.0
+		sparkle.initial_velocity_min = 90.0
+		sparkle.initial_velocity_max = 170.0
+		sparkle.gravity = Vector2.ZERO
+		sparkle.scale_amount_min = 0.18
+		sparkle.scale_amount_max = 0.3
+		sparkle.color_ramp = _gradient([Color("ffe36b"), Color("ffffff")], [1.0, 0.0])
+		sparkle.z_index = 6
+		add_child(sparkle)
+		coin_sparkles.append(sparkle)
+
+
+func play_coin_sparkle(at: Vector2) -> void:
+	if coin_sparkles.is_empty():
+		return
+	var sparkle := coin_sparkles[coin_sparkle_next]
+	coin_sparkle_next = (coin_sparkle_next + 1) % coin_sparkles.size()
+	sparkle.global_position = at
+	sparkle.restart()
+
+
+func clear_rocks() -> void:
+	if not rocks_layer:
+		return
+	for rock in rocks_layer.get_children():
+		rocks_layer.remove_child(rock)
+		rock.queue_free()
+
+
+func find_rock_target() -> Node2D:
+	# Bats first (they're the danger), then spider webs, then racer jellies.
+	var from := get_player_center()
+	var best: Node2D = null
+	var best_distance := ROCK_RANGE
+	for group in [bats.get_children(), spider_webs.get_children(), bot_swings.get_children()]:
+		for node in group:
+			var target := node as Node2D
+			if not target or target.has_meta("stuck_web"):
+				continue
+			var distance := target.global_position.distance_to(from)
+			if distance < best_distance:
+				best_distance = distance
+				best = target
+		if best:
+			return best
+	return null
+
+
+func throw_rock(target: Node2D) -> void:
+	var from := get_player_center()
+	var to := target.global_position
+	var flight_time := maxf(0.15, from.distance_to(to) / ROCK_SPEED)
+	# Aim a little high so gravity brings the rock down onto the target.
+	var launch := (to - from) / flight_time - Vector2(0.0, ROCK_GRAVITY * flight_time * 0.5)
+	var rock := Sprite2D.new()
+	rock.texture = ROCK_TEXTURE
+	rock.scale = Vector2.ONE * 0.16
+	rock.global_position = from
+	rock.set_meta("velocity", launch)
+	rock.set_meta("life", flight_time + 0.6)
+	rocks_layer.add_child(rock)
+	play_sfx(swoosh_sound_player)
+
+
+func update_rock_thrower(delta: float) -> void:
+	if rock_time > 0.0:
+		rock_time -= delta
+		rock_cooldown -= delta
+		if rock_cooldown <= 0.0:
+			var target := find_rock_target()
+			if target:
+				throw_rock(target)
+				rock_cooldown = ROCK_INTERVAL
+			else:
+				rock_cooldown = 0.15
+	if rocks_layer.get_child_count() == 0:
+		return
+	for rock_node in rocks_layer.get_children():
+		var rock := rock_node as Sprite2D
+		var rock_velocity: Vector2 = rock.get_meta("velocity")
+		rock_velocity.y += ROCK_GRAVITY * delta
+		rock.global_position += rock_velocity * delta
+		rock.rotation += 9.0 * delta
+		rock.set_meta("velocity", rock_velocity)
+		var life := float(rock.get_meta("life")) - delta
+		rock.set_meta("life", life)
+		if _rock_hits(rock.global_position) or life <= 0.0:
+			rocks_layer.remove_child(rock)
+			rock.queue_free()
+
+
+func _rock_hits(at: Vector2) -> bool:
+	for bat_node in bats.get_children():
+		var bat := bat_node as Sprite2D
+		if bat and bat.global_position.distance_squared_to(at) < 50.0 * 50.0:
+			defeat_bat(bat)
+			show_power_message("BAT BONKED!")
+			return true
+	for web_node in spider_webs.get_children():
+		var web := web_node as SpiderWeb
+		if web and web.global_position.distance_squared_to(at) < pow(SpiderWeb.RADIUS * 0.8, 2.0):
+			destroy_spider_web(web, true)
+			return true
+	for bot_node in bot_swings.get_children():
+		var bot := bot_node as Node2D
+		if bot and bot.global_position.distance_squared_to(at) < 42.0 * 42.0:
+			# A bonk knocks the racer off its rope.
+			bot.set_meta("rope_cut", true)
+			var bot_velocity: Vector2 = bot.get_meta("velocity")
+			bot.set_meta("velocity", bot_velocity + Vector2(0.0, -260.0))
+			show_power_message("BONK! %s" % str(bot.get_meta("name", "A JELLY")))
+			return true
+	return false
+
+
 func open_tutorial() -> void:
 	tutorial.open()
 
@@ -1801,6 +1965,12 @@ func _on_tutorial_closed() -> void:
 
 
 const VERSION_LOG: Array[Dictionary] = [
+	{"version": "1.2.0", "notes": [
+		"New ROCK THROWER power-up: lobs rocks at bats, spider webs and other jellies for 10 seconds. Find it in the sky or buy it in the shop.",
+		"Smoother: the world now redraws every frame, so coins, ropes and the sky keep up with fast swings.",
+		"Fixed things drawing over each other (orbs over your jelly, ropes on top, bats hiding behind racers).",
+		"Prettier candy rope and sparkles when you grab coins.",
+	]},
 	{"version": "1.1.9", "notes": [
 		"Fixed a crash when opening the Sparkle chest.",
 		"Some of the other jellies now show off glows and trails too.",
@@ -2303,17 +2473,10 @@ func _process(delta: float) -> void:
 
 func _physics_process(delta: float) -> void:
 
-	# The world art is procedural; redraw at 20 FPS instead of rebuilding the
-
-	# entire 12,000px scene on every physics step.
-
-	redraw_timer += delta
-
-	if redraw_timer >= 0.05:
-
-		redraw_timer = 0.0
-
-		queue_redraw()
+	# Redraw the procedural world every frame. Drawing is culled to the screen,
+	# so it's cheap, and redrawing at 20 FPS made coins, ropes and the sky lag
+	# behind fast swings (gaps at the screen edges).
+	queue_redraw()
 
 	if not game_started:
 
@@ -2475,6 +2638,7 @@ func _physics_process(delta: float) -> void:
 	collect_coins(delta)
 
 	update_bats(delta)
+	update_rock_thrower(delta)
 	update_spider_webs(delta)
 	jump_dots.visible = active_game_mode == "CLIMB" and not game_over
 	if jump_dots.visible:
@@ -2657,6 +2821,16 @@ func populate_world() -> void:
 	for magnet_index in range(magnet_count):
 
 		spawn_power_up("magnet", Vector2(
+
+			randf_range(120.0, map_width - 120.0),
+
+			randf_range(300.0, floor_y - 220.0)
+
+		))
+
+	for rock_index in range(rock_count):
+
+		spawn_power_up("rocks", Vector2(
 
 			randf_range(120.0, map_width - 120.0),
 
@@ -3474,6 +3648,8 @@ func spawn_power_up(kind: String, power_up_position: Vector2) -> void:
 
 		"magnet": power_up.texture = MAGNET_TEXTURE
 
+		"rocks": power_up.texture = ROCK_TEXTURE
+
 		_: power_up.texture = KNIFE_TEXTURE
 
 	power_up.position = power_up_position
@@ -3530,6 +3706,12 @@ func apply_power_up(kind: String) -> void:
 		var fling := Vector2.from_angle(randf() * TAU)
 		velocity = fling * 1550.0
 		show_power_message("WILD ROCKET!")
+
+	elif kind == "rocks":
+
+		rock_time = ROCK_DURATION
+		rock_cooldown = 0.0
+		show_power_message("ROCK THROWER: 10s")
 
 	elif kind == "magnet":
 
@@ -5158,6 +5340,8 @@ func restart_game() -> void:
 	bat_kills = 0
 
 	magnet_time = 0.0
+	rock_time = 0.0
+	clear_rocks()
 
 	knife_time = 0.0
 
@@ -5335,6 +5519,8 @@ func collect_coins(delta: float) -> void:
 
 		if has_player_contact(adjusted_position, 34.0):
 
+			play_coin_sparkle(adjusted_position)
+
 			coins_collected += 1
 
 			wallet_coins += 1
@@ -5364,6 +5550,8 @@ func collect_coins(delta: float) -> void:
 			adjusted_big_coin = adjusted_big_coin.move_toward(jelly_center, COIN_SUCTION_SPEED * delta)
 
 		if has_player_contact(adjusted_big_coin, 52.0):
+
+			play_coin_sparkle(adjusted_big_coin)
 
 			coins_collected += 5
 
