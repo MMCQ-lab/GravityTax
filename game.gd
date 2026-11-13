@@ -1203,8 +1203,10 @@ func build_powerup_ui() -> void:
 
 	powerup_panel = Panel.new()
 	powerup_panel.name = "PowerupPanel"
+	# Height follows the number of items so every row sits inside the card.
+	const POWERUP_ROW_HEIGHT := 108.0
 	powerup_panel.position = Vector2(40.0, 290.0)
-	powerup_panel.size = Vector2(640.0, 640.0)
+	powerup_panel.size = Vector2(640.0, 22.0 + POWERUP_ROW_HEIGHT * POWERUP_SHOP.size() + 10.0)
 	powerup_panel.add_theme_stylebox_override("panel", CuteStyle.box(CuteStyle.CREAM, 36, CuteStyle.WHITE, 5, 0.2))
 	powerup_panel.hide()
 	shop_screen.add_child(powerup_panel)
@@ -1215,8 +1217,8 @@ func build_powerup_ui() -> void:
 		icon.texture = powerup_icon(kind)
 		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		icon.position = Vector2(22.0, row_y)
-		icon.size = Vector2(96.0, 96.0)
+		icon.position = Vector2(26.0, row_y + 4.0)
+		icon.size = Vector2(84.0, 84.0)
 		if kind == "wild":
 			icon.modulate = WILD_ROCKET_TINT
 			icon.rotation_degrees = 35.0
@@ -1230,27 +1232,27 @@ func build_powerup_ui() -> void:
 		powerup_panel.add_child(title)
 		var desc := Label.new()
 		desc.text = str(item["desc"])
-		desc.position = Vector2(132.0, row_y + 38.0)
-		desc.size = Vector2(300.0, 50.0)
+		desc.position = Vector2(132.0, row_y + 36.0)
+		desc.size = Vector2(300.0, 40.0)
 		desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		CuteStyle.style_label(desc, CuteStyle.INK_SOFT, 16)
 		powerup_panel.add_child(desc)
 		var owned := Label.new()
-		owned.position = Vector2(132.0, row_y + 84.0)
+		owned.position = Vector2(132.0, row_y + 74.0)
 		owned.size = Vector2(300.0, 24.0)
 		CuteStyle.style_label(owned, CuteStyle.INK, 16)
 		powerup_panel.add_child(owned)
 		var buy := Button.new()
 		buy.name = "Buy_" + kind
 		buy.text = "BUY  %d" % int(item["price"])
-		buy.position = Vector2(448.0, row_y + 20.0)
-		buy.size = Vector2(170.0, 72.0)
+		buy.position = Vector2(448.0, row_y + 16.0)
+		buy.size = Vector2(170.0, 68.0)
 		buy.add_theme_font_size_override("font_size", 24)
 		CuteStyle.style_button(buy, CuteStyle.MINT)
 		buy.pressed.connect(buy_powerup.bind(kind))
 		powerup_panel.add_child(buy)
 		powerup_rows[kind] = {"owned": owned, "buy": buy}
-		row_y += 122.0
+		row_y += POWERUP_ROW_HEIGHT
 
 	# In-run bar of owned power-ups, bottom-left (banner ads never show in a run).
 	powerup_bar = HBoxContainer.new()
@@ -5247,6 +5249,9 @@ func select_game_mode(mode: String) -> void:
 	active_game_mode = mode
 
 	high_score = coin_high_score if active_game_mode == "COIN" else climb_high_score
+
+	# Refresh the "Best ..." label so it never shows the previous mode's text.
+	update_high_score_label()
 
 	start_game()
 
