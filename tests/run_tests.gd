@@ -94,6 +94,7 @@ func _run() -> void:
 	await test_chests_and_effects()
 	await test_clear_all_data()
 	await test_sparkle_spin_and_bot_effects()
+	await test_rock_thrower_and_draw_order()
 	clear_save_files()
 	print("\n%d passed, %d failed" % [passes, failures])
 	quit(1 if failures > 0 else 0)
@@ -833,3 +834,29 @@ func test_sparkle_spin_and_bot_effects() -> void:
 				with_effects += 1
 		game.return_to_main_menu()
 	check("some racer jellies show effects", with_effects > 0)
+
+
+func test_rock_thrower_and_draw_order() -> void:
+	check("player draws above racers, orbs and its rope", game.block.z_index > game.bot_swings.z_index and game.block.z_index > game.swing_anchors.z_index and game.block.z_index > game.swing_rope.z_index)
+	check("bats draw above racers and the player", game.bats.z_index > game.block.z_index)
+	check("rock thrower is in the shop", game.powerup_rows.has("rocks"))
+	game.select_game_mode("COIN")
+	game.revive_shield_time = 999.0
+	for bat in game.bats.get_children():
+		bat.queue_free()
+	await physics_frame
+	game.spawn_bat(game.get_player_center() + Vector2(260.0, -120.0))
+	var kills_before: int = game.bat_kills
+	game.apply_power_up("rocks")
+	check("rock thrower starts", game.rock_time > 9.0)
+	var hit := false
+	for frame in range(120):
+		game.revive_shield_time = 999.0
+		game.velocity = Vector2.ZERO
+		await physics_frame
+		if game.bat_kills > kills_before:
+			hit = true
+			break
+	check("a thrown rock knocks out a nearby bat", hit)
+	game.return_to_main_menu()
+	check("rocks are cleared on the menu", game.rocks_layer.get_child_count() == 0 or game.rock_time <= 0.0)
