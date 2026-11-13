@@ -140,7 +140,7 @@ func show_page(index: int) -> void:
 	for child in _extra_holder.get_children():
 		child.queue_free()
 	var images: Array = page.get("images", [])
-	var image_size := 170.0 if images.size() <= 2 else 112.0
+	var image_size := 170.0 if images.size() <= 2 else (112.0 if images.size() <= 4 else 88.0)
 	for texture in images:
 		var picture := TextureRect.new()
 		picture.texture = texture

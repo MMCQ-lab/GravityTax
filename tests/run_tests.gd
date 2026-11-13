@@ -95,6 +95,7 @@ func _run() -> void:
 	await test_clear_all_data()
 	await test_sparkle_spin_and_bot_effects()
 	await test_rock_thrower_and_draw_order()
+	await test_layout_fixes()
 	clear_save_files()
 	print("\n%d passed, %d failed" % [passes, failures])
 	quit(1 if failures > 0 else 0)
@@ -860,3 +861,18 @@ func test_rock_thrower_and_draw_order() -> void:
 	check("a thrown rock knocks out a nearby bat", hit)
 	game.return_to_main_menu()
 	check("rocks are cleared on the menu", game.rocks_layer.get_child_count() == 0 or game.rock_time <= 0.0)
+
+
+func test_layout_fixes() -> void:
+	# Every power-up row sits inside the white card.
+	var inside := true
+	for child in game.powerup_panel.get_children():
+		var control := child as Control
+		if control and control.position.y + control.size.y > game.powerup_panel.size.y + 1.0:
+			inside = false
+	check("all power-up rows fit inside the card", inside)
+	game.select_game_mode("TAG")
+	game.return_to_main_menu()
+	game.select_game_mode("COIN")
+	check("Coin Run label isn't left as TAG MODE", game.high_score_label.text.begins_with("Best Coins"))
+	game.return_to_main_menu()
